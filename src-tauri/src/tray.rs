@@ -9,9 +9,8 @@ use crate::{logger, projects, timesheet, AppState};
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let menu = build_menu(app.handle())?;
 
-    // Simple blue placeholder icon (32x32 RGBA)
-    let rgba: Vec<u8> = vec![66, 133, 244, 255].repeat(32 * 32);
-    let icon = tauri::image::Image::new_owned(rgba, 32, 32);
+    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.ico"))
+        .expect("failed to load tray icon");
 
     let _tray = TrayIconBuilder::new("main")
         .icon(icon)
