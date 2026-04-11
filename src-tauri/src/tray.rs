@@ -2,20 +2,24 @@ use std::sync::atomic::Ordering;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager, Wry};
+use image::GenericImageView;
+use tauri::{AppHandle, Emitter, Manager, Wry};
 
 use crate::{logger, projects, timesheet, AppState};
 
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let menu = build_menu(app.handle())?;
 
-    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.ico"))
-        .expect("failed to load tray icon");
+    let img = image::load_from_memory(include_bytes!("../icons/icon.png"))
+        .expect("failed to decode icon");
+    let rgba = img.to_rgba8();
+    let (w, h) = img.dimensions();
+    let icon = tauri::image::Image::new_owned(rgba.into_raw(), w, h);
 
-    let _tray = TrayIconBuilder::new("main")
+    let _tray = TrayIconBuilder::with_id("main")
         .icon(icon)
         .menu(&menu)
-        .menu_on_left_click(false)
+        .show_menu_on_left_click(false)
         .tooltip("ProjectLog")
         .on_menu_event(handle_menu_event)
         .build(app)?;
@@ -261,8 +265,6 @@ fn handle_reset_sheet(app: &AppHandle) {
         .dialog()
         .message("Are you sure you want to reset the timesheet?")
         .title("Reset timesheet")
-        .ok_button_label("Yes")
-        .cancel_button_label("No")
         .blocking_show();
     if confirmed {
         let state = app.state::<AppState>();
@@ -276,8 +278,6 @@ fn handle_reset_projects(app: &AppHandle) {
         .dialog()
         .message("Are you sure you want to reset all projects?")
         .title("Reset projects")
-        .ok_button_label("Yes")
-        .cancel_button_label("No")
         .blocking_show();
     if confirmed {
         let state = app.state::<AppState>();

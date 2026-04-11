@@ -99,7 +99,7 @@ pub fn generate(data_dir: &Path) -> Result<PathBuf, String> {
         ws.write_string(0, 0, &sheet_name)
             .map_err(|e| e.to_string())?;
         for (i, hdr) in day_headers.iter().enumerate() {
-            ws.write_string(0, (i + 1) as u16, hdr)
+            ws.write_string(0, (i + 1) as u16, *hdr)
                 .map_err(|e| e.to_string())?;
         }
 
