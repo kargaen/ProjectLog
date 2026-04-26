@@ -42,7 +42,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRFNzFFNDA1NEY0REQwNUIKUldSYjBFMVBCZVJ4VG1iZ2JNejZTUDdRN0pzdzlDaURnZDYvVUR6cnpKaG1XTHpKeWpxc213d1AK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM3QTdGMUU0MkM1MjNFQUQKUldTdFBsSXM1UEdueDJid2hCZ2UvTHdyQW5BaDBmcFRrbUFwOGgvc0JMYi94aTR4VXZCNVBSdVUK",
       "endpoints": [
         "https://github.com/kargaen/ProjectLog/releases/latest/download/latest.json"
       ]
