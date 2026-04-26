@@ -10,8 +10,19 @@ fn default_quickpanel_opacity() -> f64 {
     1.0
 }
 
+fn default_project_sort_mode() -> String {
+    "manual".to_string()
+}
+
 fn normalize_opacity(value: f64) -> f64 {
     value.clamp(0.35, 1.0)
+}
+
+fn normalize_sort_mode(value: &str) -> String {
+    match value {
+        "alphabetical" | "recent" | "manual" => value.to_string(),
+        _ => default_project_sort_mode(),
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -24,7 +35,7 @@ pub struct UiSettings {
     pub quickpanel_height: Option<f64>,
     #[serde(default = "default_quickpanel_opacity")]
     pub quickpanel_opacity: f64,
-    #[serde(default)]
+    #[serde(default = "default_project_sort_mode")]
     pub project_sort_mode: String,
     #[serde(default)]
     pub project_manual_order: Vec<String>,
@@ -62,6 +73,7 @@ pub fn load(data_dir: &Path) -> UiSettings {
                 log!("loaded settings");
                 UiSettings {
                     quickpanel_opacity: normalize_opacity(settings.quickpanel_opacity),
+                    project_sort_mode: normalize_sort_mode(&settings.project_sort_mode),
                     ..settings
                 }
             }
@@ -82,6 +94,7 @@ pub fn save(data_dir: &Path, settings: &UiSettings) {
     let temp_path = data_dir.join("settings.json.tmp");
     let normalized = UiSettings {
         quickpanel_opacity: normalize_opacity(settings.quickpanel_opacity),
+        project_sort_mode: normalize_sort_mode(&settings.project_sort_mode),
         ..settings.clone()
     };
     match serde_json::to_string_pretty(&normalized) {
@@ -155,6 +168,26 @@ mod tests {
         assert_eq!(actual.project_sort_mode, expected.project_sort_mode);
         assert_eq!(actual.project_manual_order, expected.project_manual_order);
         assert_eq!(actual.project_recent_usage, expected.project_recent_usage);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_normalizes_empty_sort_mode() {
+        let dir = temp_dir();
+        fs::write(
+            dir.join("settings.json"),
+            r#"{
+  "always_on_top": false,
+  "open_on_start": false,
+  "quickpanel_opacity": 1.0,
+  "project_sort_mode": ""
+}
+"#,
+        )
+        .unwrap();
+
+        let settings = load(&dir);
+        assert_eq!(settings.project_sort_mode, "manual");
         let _ = fs::remove_dir_all(dir);
     }
 }

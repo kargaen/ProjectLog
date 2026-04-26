@@ -85,7 +85,7 @@
   let title = $state("");
   let value = $state("");
   let inputEl: HTMLInputElement | undefined = $state();
-  let opacitySaveTimer: ReturnType<typeof setTimeout> | undefined = $state();
+  let settingsSaveTimer: ReturnType<typeof setTimeout> | undefined = $state();
   let closeInputOnSubmit = $state(true);
 
   function clamp(value: number, min: number, max: number) {
@@ -98,7 +98,7 @@
       ...recentProjects,
       [project]: Date.now(),
     };
-    queueOpacitySave();
+    queueSettingsSave();
   }
 
   function syncManualOrder(projects: string[]) {
@@ -107,8 +107,13 @@
     for (const project of projects) {
       if (!ordered.includes(project)) ordered.push(project);
     }
-    manualOrder = ordered;
-    queueOpacitySave();
+    if (
+      ordered.length !== manualOrder.length ||
+      ordered.some((project, index) => project !== manualOrder[index])
+    ) {
+      manualOrder = ordered;
+      queueSettingsSave();
+    }
   }
 
   function isEnterSubmit(event: KeyboardEvent) {
@@ -286,9 +291,9 @@
     log.info("toggleOpenOnStart", { openOnStart });
   }
 
-  function queueOpacitySave() {
-    if (opacitySaveTimer) clearTimeout(opacitySaveTimer);
-    opacitySaveTimer = setTimeout(() => {
+  function queueSettingsSave() {
+    if (settingsSaveTimer) clearTimeout(settingsSaveTimer);
+    settingsSaveTimer = setTimeout(() => {
       persistUiSettings().catch(() => {});
     }, 160);
   }
@@ -374,7 +379,7 @@
 
   function setSortMode(next: SortMode) {
     sortMode = next;
-    queueOpacitySave();
+    queueSettingsSave();
   }
 
   function handleDragStart(project: string) {
@@ -420,7 +425,7 @@
     }
     order.splice(to, 0, droppedProject);
     manualOrder = order;
-    queueOpacitySave();
+    queueSettingsSave();
     draggedProject = null;
     dropTargetProject = null;
     dropPosition = "before";
@@ -634,7 +639,7 @@
         oninput={(event) => {
           const target = event.currentTarget as HTMLInputElement;
           quickPanelOpacity = Number(target.value) / 100;
-          queueOpacitySave();
+          queueSettingsSave();
         }}
       />
       <strong>{Math.round(quickPanelOpacity * 100)}%</strong>

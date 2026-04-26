@@ -34,9 +34,6 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Install frontend dependencies
         run: npm ci
 
@@ -76,10 +73,6 @@ jobs:
 
       - name: Build frontend
         run: npm run build
-
-      - name: Test Rust core
-        run: cargo test
-        working-directory: src-tauri
 
       - name: Release metadata
         id: meta

@@ -358,24 +358,43 @@ fn save_ui_settings(
     state: State<AppState>,
     app: tauri::AppHandle,
 ) {
+    let normalized_opacity = quickpanel_opacity.clamp(0.35, 1.0);
+    let normalized_sort_mode = match project_sort_mode.as_str() {
+        "alphabetical" | "recent" | "manual" => project_sort_mode,
+        _ => "manual".to_string(),
+    };
     log!(
         "save_ui_settings always_on_top={} open_on_start={} quickpanel_opacity={:.2} project_sort_mode={}",
         always_on_top,
         open_on_start,
-        quickpanel_opacity,
-        project_sort_mode
+        normalized_opacity,
+        normalized_sort_mode
     );
     let mut settings = state.settings.lock().unwrap();
+    let tray_needs_rebuild = settings.project_sort_mode != normalized_sort_mode
+        || settings.project_manual_order != project_manual_order
+        || settings.project_recent_usage != project_recent_usage;
+    let changed = settings.always_on_top != always_on_top
+        || settings.open_on_start != open_on_start
+        || (settings.quickpanel_opacity - normalized_opacity).abs() > f64::EPSILON
+        || tray_needs_rebuild;
+
+    if !changed {
+        log_debug!("save_ui_settings skipped unchanged settings");
+        return;
+    }
+
     settings.always_on_top = always_on_top;
     settings.open_on_start = open_on_start;
-    settings.quickpanel_opacity = quickpanel_opacity.clamp(0.35, 1.0);
-    settings.project_sort_mode = project_sort_mode;
+    settings.quickpanel_opacity = normalized_opacity;
+    settings.project_sort_mode = normalized_sort_mode;
     settings.project_manual_order = project_manual_order;
     settings.project_recent_usage = project_recent_usage;
     settings::save(&state.data_dir, &settings);
     drop(settings);
-    tray::rebuild_menu(&app);
-    emit_state_changed(&app);
+    if tray_needs_rebuild {
+        tray::rebuild_menu(&app);
+    }
 }
 
 #[tauri::command]
