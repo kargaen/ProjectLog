@@ -1,0 +1,219 @@
+name: Build, Release, and Website
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional version to build, e.g. 2.0.1. Leave empty to use package.json."
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Apply workflow-dispatch version
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const version = process.env.VERSION;
+          for (const file of ["package.json", "package-lock.json"]) {
+            const json = JSON.parse(fs.readFileSync(file, "utf8"));
+            json.version = version;
+            if (json.packages?.[""]) json.packages[""].version = version;
+            fs.writeFileSync(file, JSON.stringify(json, null, 2) + "\n");
+          }
+          const conf = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
+          conf.version = version;
+          fs.writeFileSync("src-tauri/tauri.conf.json", JSON.stringify(conf, null, 2) + "\n");
+          NODE
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Check version sync
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          TAURI_VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          if [[ "${PACKAGE_VERSION}" != "${TAURI_VERSION}" ]]; then
+            echo "::error::package.json (${PACKAGE_VERSION}) and tauri.conf.json (${TAURI_VERSION}) versions differ."
+            exit 1
+          fi
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" != "v${PACKAGE_VERSION}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package version v${PACKAGE_VERSION}."
+            exit 1
+          fi
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Test Rust core
+        run: cargo test
+        working-directory: src-tauri
+
+      - name: Release metadata
+        id: meta
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${VERSION}" >> "${GITHUB_OUTPUT}"
+
+  build-windows:
+    name: Build Windows Installer and Publish Release
+    needs: validate
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Apply workflow-dispatch version
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const version = process.env.VERSION;
+          for (const file of ["package.json", "package-lock.json"]) {
+            const json = JSON.parse(fs.readFileSync(file, "utf8"));
+            json.version = version;
+            if (json.packages?.[""]) json.packages[""].version = version;
+            fs.writeFileSync(file, JSON.stringify(json, null, 2) + "\n");
+          }
+          const conf = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
+          conf.version = version;
+          fs.writeFileSync("src-tauri/tauri.conf.json", JSON.stringify(conf, null, 2) + "\n");
+          NODE
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Test Rust core
+        run: cargo test
+        working-directory: src-tauri
+
+      - name: Build installer and upload release assets
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ needs.validate.outputs.tag }}
+          releaseName: "ProjectLog ${{ needs.validate.outputs.tag }}"
+          releaseBody: "Automated ProjectLog release for ${{ needs.validate.outputs.tag }}. Download the installer assets below."
+          releaseDraft: false
+          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
+
+  deploy-pages:
+    name: Deploy Website
+    needs:
+      - validate
+      - build-windows
+    if: ${{ always() && needs.validate.result == 'success' && needs.build-windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate website
+        shell: bash
+        run: |
+          mkdir -p docs
+          cat > docs/index.html <<EOF
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>ProjectLog</title>
+              <style>
+                body { margin: 0; font-family: system-ui, sans-serif; color: #20241f; background: #f4f5f1; }
+                main { max-width: 720px; margin: 0 auto; padding: 64px 24px; }
+                h1 { font-size: 36px; margin: 0 0 8px; }
+                p { font-size: 17px; line-height: 1.55; color: #495047; }
+                a { color: #267a62; font-weight: 650; }
+              </style>
+            </head>
+            <body>
+              <main>
+                <h1>ProjectLog</h1>
+                <p>Current version: <strong>${{ needs.validate.outputs.version }}</strong></p>
+                <p>No-nonsense project time tracking for Cockpit timesheets.</p>
+                <p><a href="https://github.com/kargaen/ProjectLog/releases/latest">Download the latest release</a></p>
+              </main>
+            </body>
+          </html>
+          EOF
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload website artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy website
+        id: deployment
+        uses: actions/deploy-pages@v4

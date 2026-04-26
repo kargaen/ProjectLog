@@ -4,7 +4,7 @@
   "identifier": "com.kargaen.projectlog",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1430",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -13,13 +13,17 @@
     "windows": [
       {
         "label": "main",
-        "title": "ProjectLog",
-        "width": 400,
-        "height": 180,
-        "resizable": false,
+        "title": "ProjectLog QuickPanel",
+        "width": 430,
+        "height": 650,
+        "minWidth": 300,
+        "minHeight": 430,
+        "resizable": true,
         "visible": false,
         "center": true,
-        "decorations": true
+        "decorations": false,
+        "transparent": true,
+        "shadow": false
       }
     ],
     "security": {
@@ -29,10 +33,19 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRFNzFFNDA1NEY0REQwNUIKUldSYjBFMVBCZVJ4VG1iZ2JNejZTUDdRN0pzdzlDaURnZDYvVUR6cnpKaG1XTHpKeWpxc213d1AK",
+      "endpoints": [
+        "https://github.com/kargaen/ProjectLog/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
