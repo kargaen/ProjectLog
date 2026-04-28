@@ -4,6 +4,7 @@ mod projects;
 mod settings;
 mod timesheet;
 mod tray;
+use tauri_plugin_autostart::ManagerExt;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use settings::UiSettings;
 use tauri::{Emitter, Manager, State};
+use timesheet::{TimesheetFormat, TimesheetOptions, TimesheetRange};
 
 pub struct AppState {
     pub active_project: Mutex<String>,
@@ -45,6 +47,26 @@ fn clean_input(value: &str) -> String {
 
 fn emit_state_changed(app: &tauri::AppHandle) {
     let _ = app.emit("state-changed", ());
+}
+
+fn parse_timesheet_options(range: &str, format: &str) -> Result<TimesheetOptions, String> {
+    let range = match range {
+        "today" => TimesheetRange::Today,
+        "week" => TimesheetRange::Week,
+        "all" => TimesheetRange::All,
+        _ => return Err("Unknown timesheet range.".to_string()),
+    };
+    let format = match format {
+        "full" => TimesheetFormat::Full,
+        "lite" => TimesheetFormat::Lite,
+        _ => return Err("Unknown timesheet format.".to_string()),
+    };
+
+    if format == TimesheetFormat::Lite && range != TimesheetRange::Today {
+        return Err("Lite timesheet only supports today and yesterday.".to_string());
+    }
+
+    Ok(TimesheetOptions { range, format })
 }
 
 fn migrate_legacy_file(data_dir: &PathBuf, filename: &str) {
@@ -228,12 +250,27 @@ fn remove_project(project: String, state: State<AppState>, app: tauri::AppHandle
 
 #[tauri::command]
 fn generate_timesheet(state: State<AppState>, app: tauri::AppHandle) -> Result<(), String> {
-    log!("generate_timesheet");
+    generate_timesheet_export("all".to_string(), "full".to_string(), state, app)
+}
+
+#[tauri::command]
+fn generate_timesheet_export(
+    range: String,
+    format: String,
+    state: State<AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    log!(
+        "generate_timesheet_export range={} format={}",
+        range,
+        format
+    );
     let active = state.active_project.lock().unwrap().clone();
     let comment = state.active_comment.lock().unwrap().clone();
     logger::log_new_entry(&state.data_dir, &active, &comment);
+    let options = parse_timesheet_options(&range, &format)?;
 
-    match timesheet::generate(&state.data_dir) {
+    match timesheet::generate(&state.data_dir, options) {
         Ok(path) => {
             use tauri_plugin_opener::OpenerExt;
             app.opener()
@@ -335,7 +372,10 @@ fn open_release_notes(app: tauri::AppHandle) -> Result<(), String> {
     log!("open_release_notes");
     use tauri_plugin_opener::OpenerExt;
     app.opener()
-        .open_url("https://github.com/kargaen/ProjectLog/releases", None::<&str>)
+        .open_url(
+            "https://github.com/kargaen/ProjectLog/releases",
+            None::<&str>,
+        )
         .map_err(|e| e.to_string())
 }
 
@@ -353,6 +393,7 @@ fn save_ui_settings(
     open_on_start: bool,
     quickpanel_opacity: f64,
     project_sort_mode: String,
+    quickpanel_mode: String,
     project_manual_order: Vec<String>,
     project_recent_usage: std::collections::HashMap<String, u64>,
     state: State<AppState>,
@@ -363,15 +404,21 @@ fn save_ui_settings(
         "alphabetical" | "recent" | "manual" => project_sort_mode,
         _ => "manual".to_string(),
     };
+    let normalized_quickpanel_mode = match quickpanel_mode.as_str() {
+        "compact" | "normal" => quickpanel_mode,
+        _ => "normal".to_string(),
+    };
     log!(
-        "save_ui_settings always_on_top={} open_on_start={} quickpanel_opacity={:.2} project_sort_mode={}",
+        "save_ui_settings always_on_top={} open_on_start={} quickpanel_opacity={:.2} project_sort_mode={} quickpanel_mode={}",
         always_on_top,
         open_on_start,
         normalized_opacity,
-        normalized_sort_mode
+        normalized_sort_mode,
+        normalized_quickpanel_mode
     );
     let mut settings = state.settings.lock().unwrap();
     let tray_needs_rebuild = settings.project_sort_mode != normalized_sort_mode
+        || settings.quickpanel_mode != normalized_quickpanel_mode
         || settings.project_manual_order != project_manual_order
         || settings.project_recent_usage != project_recent_usage;
     let changed = settings.always_on_top != always_on_top
@@ -388,9 +435,15 @@ fn save_ui_settings(
     settings.open_on_start = open_on_start;
     settings.quickpanel_opacity = normalized_opacity;
     settings.project_sort_mode = normalized_sort_mode;
+    settings.quickpanel_mode = normalized_quickpanel_mode;
     settings.project_manual_order = project_manual_order;
     settings.project_recent_usage = project_recent_usage;
     settings::save(&state.data_dir, &settings);
+    if open_on_start {
+        let _ = app.autolaunch().enable();
+    } else {
+        let _ = app.autolaunch().disable();
+    }
     drop(settings);
     if tray_needs_rebuild {
         tray::rebuild_menu(&app);
@@ -419,6 +472,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -448,6 +505,9 @@ pub fn run() {
             tray::setup(app)?;
             log!("tray initialized");
 
+            use tauri_plugin_autostart::ManagerExt;
+            let _ = app.autolaunch().enable();
+
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(300));
@@ -473,6 +533,7 @@ pub fn run() {
             set_comment,
             remove_project,
             generate_timesheet,
+            generate_timesheet_export,
             reset_timesheet,
             reset_projects,
             open_log_file,

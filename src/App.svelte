@@ -15,10 +15,14 @@
 
   const log = createLogger("quickpanel");
   const MIN_QUICKPANEL_WIDTH = 300;
-  const MIN_QUICKPANEL_HEIGHT = 430;
+  const MIN_NORMAL_HEIGHT = 430;
+  const MIN_COMPACT_HEIGHT = 220;
   const MIN_OPACITY = 0.35;
 
   type SortMode = "manual" | "alphabetical" | "recent";
+  type QuickPanelMode = "normal" | "compact";
+  type TimesheetRange = "today" | "week" | "all";
+  type TimesheetFormat = "full" | "lite";
 
   type ProjectState = {
     app_version: string;
@@ -36,6 +40,7 @@
       quickpanel_height: number | null;
       quickpanel_opacity: number;
       project_sort_mode: SortMode;
+      quickpanel_mode: QuickPanelMode;
       project_manual_order: string[];
       project_recent_usage: Record<string, number>;
     };
@@ -57,6 +62,7 @@
       quickpanel_height: null,
       quickpanel_opacity: 1,
       project_sort_mode: "manual",
+      quickpanel_mode: "normal",
       project_manual_order: [],
       project_recent_usage: {},
     },
@@ -73,6 +79,7 @@
   let updatePromptOpen = $state(false);
   let quickPanelOpacity = $state(1);
   let sortMode = $state<SortMode>("manual");
+  let quickPanelMode = $state<QuickPanelMode>("normal");
   let recentProjects = $state<Record<string, number>>({});
   let manualOrder = $state<string[]>([]);
   let draggedProject = $state<string | null>(null);
@@ -134,6 +141,7 @@
     const savedHeight = appState.settings.quickpanel_height;
     const savedX = appState.settings.quickpanel_x;
     const savedY = appState.settings.quickpanel_y;
+    const minHeight = appState.settings.quickpanel_mode === "compact" ? MIN_COMPACT_HEIGHT : MIN_NORMAL_HEIGHT;
 
     if (!savedWidth || !savedHeight) {
       return;
@@ -164,7 +172,7 @@
 
     const area = targetMonitor.workArea;
     const width = clamp(savedWidth, MIN_QUICKPANEL_WIDTH, area.size.width);
-    const height = clamp(savedHeight, MIN_QUICKPANEL_HEIGHT, area.size.height);
+    const height = clamp(savedHeight, minHeight, area.size.height);
     const x = clamp(
       savedX ?? area.position.x + 32,
       area.position.x,
@@ -188,6 +196,7 @@
     openOnStart = appState.settings.open_on_start;
     quickPanelOpacity = appState.settings.quickpanel_opacity;
     sortMode = appState.settings.project_sort_mode ?? "manual";
+    quickPanelMode = appState.settings.quickpanel_mode ?? "normal";
     manualOrder = appState.settings.project_manual_order ?? [];
     recentProjects = appState.settings.project_recent_usage ?? {};
     syncManualOrder([...appState.projects, ...appState.adhoc_projects]);
@@ -199,9 +208,24 @@
       openOnStart,
       quickpanelOpacity: quickPanelOpacity,
       projectSortMode: sortMode,
+      quickpanelMode,
       projectManualOrder: manualOrder,
       projectRecentUsage: recentProjects,
     });
+  }
+
+  async function applyQuickpanelModeLayout(mode: QuickPanelMode) {
+    const win = getCurrentWindow();
+    const minHeight = mode === "compact" ? MIN_COMPACT_HEIGHT : MIN_NORMAL_HEIGHT;
+    await win.setMinSize(new LogicalSize(MIN_QUICKPANEL_WIDTH, minHeight)).catch(() => {});
+
+    try {
+      const size = await win.outerSize();
+      if (size.height < minHeight) {
+        await win.setSize(new LogicalSize(Math.max(size.width, MIN_QUICKPANEL_WIDTH), minHeight)).catch(() => {});
+      }
+    } catch {
+    }
   }
 
   async function selectProject(project: string) {
@@ -257,8 +281,12 @@
   }
 
   async function generateTimesheet() {
-    log.info("generateTimesheet");
-    await invoke("generate_timesheet");
+    await generateTimesheetExport("all", "full");
+  }
+
+  async function generateTimesheetExport(range: TimesheetRange, format: TimesheetFormat = "full") {
+    log.info("generateTimesheetExport", { range, format });
+    await invoke("generate_timesheet_export", { range, format });
     await loadState();
   }
 
@@ -289,6 +317,18 @@
     openOnStart = !openOnStart;
     await persistUiSettings();
     log.info("toggleOpenOnStart", { openOnStart });
+  }
+
+  async function setQuickPanelMode(nextMode: QuickPanelMode) {
+    if (quickPanelMode === nextMode) return;
+    quickPanelMode = nextMode;
+    await persistUiSettings();
+    await applyQuickpanelModeLayout(nextMode);
+    log.info("setQuickPanelMode", { quickPanelMode: nextMode });
+  }
+
+  async function toggleQuickPanelMode() {
+    await setQuickPanelMode(quickPanelMode === "compact" ? "normal" : "compact");
   }
 
   function queueSettingsSave() {
@@ -436,6 +476,7 @@
     await loadState();
     const win = getCurrentWindow();
     await restoreQuickPanelBounds();
+    await applyQuickpanelModeLayout(quickPanelMode);
     await win.setAlwaysOnTop(alwaysOnTop);
     await checkForUpdate();
     if (openOnStart) await win.show();
@@ -502,7 +543,7 @@
 
 <svelte:window onkeydown={onKeydown} onmouseup={finishDrag} />
 
-<main style:opacity={quickPanelOpacity}>
+<main class:compact-shell={quickPanelMode === "compact"} style:opacity={quickPanelOpacity}>
   {#if updateStatus !== "idle"}
     <section class="update">
       <div>
@@ -516,31 +557,65 @@
     </section>
   {/if}
 
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <header class="quickpanel-header">
-    <div class="quickpanel-drag" onmousedown={startWindowDrag}>
-      <img class="logo" src="/icon.svg" alt="ProjectLog" />
-      <div>
-        <h1>ProjectLog QuickPanel</h1>
-        <p>{appState.active_project || "No active project"}</p>
-        {#if appState.active_comment}
-          <p class="active-comment">{appState.active_comment}</p>
-        {/if}
+  {#if quickPanelMode === "normal"}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <header class="quickpanel-header">
+      <div class="quickpanel-drag" onmousedown={startWindowDrag}>
+        <img class="logo" src="/icon.svg" alt="ProjectLog" />
+        <div>
+          <h1>ProjectLog QuickPanel</h1>
+          <p>{appState.active_project || "No active project"}</p>
+          {#if appState.active_comment}
+            <p class="active-comment">{appState.active_comment}</p>
+          {/if}
+        </div>
       </div>
-    </div>
-    <button
-      class="ghost"
-      onmousedown={(event) => event.stopPropagation()}
-      onclick={() => getCurrentWindow().hide()}
-    >Hide</button>
-  </header>
+      <div class="header-actions">
+        <button
+          class="ghost"
+          onmousedown={(event) => event.stopPropagation()}
+          onclick={toggleQuickPanelMode}
+        >Compact</button>
+        <button
+          class="ghost"
+          onmousedown={(event) => event.stopPropagation()}
+          onclick={() => getCurrentWindow().hide()}
+        >Hide</button>
+      </div>
+    </header>
+  {:else}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <header class="quickpanel-header compact-header">
+      <div class="quickpanel-drag" onmousedown={startWindowDrag}>
+        <img class="logo" src="/icon.svg" alt="ProjectLog" />
+        <div>
+          <h1>ProjectLog Compact</h1>
+          <p>{appState.active_project || "Pick a project"}</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button
+          class="ghost"
+          onmousedown={(event) => event.stopPropagation()}
+          onclick={toggleQuickPanelMode}
+        >Normal</button>
+        <button
+          class="ghost"
+          onmousedown={(event) => event.stopPropagation()}
+          onclick={() => getCurrentWindow().hide()}
+        >Hide</button>
+      </div>
+    </header>
+  {/if}
 
   <section class="panel project-panel">
-    <div class="sort-row">
-      <button class:sort-active={sortMode === "manual"} onclick={() => setSortMode("manual")}>Manual</button>
-      <button class:sort-active={sortMode === "alphabetical"} onclick={() => setSortMode("alphabetical")}>A-Z</button>
-      <button class:sort-active={sortMode === "recent"} onclick={() => setSortMode("recent")}>Recent</button>
-    </div>
+    {#if quickPanelMode === "normal"}
+      <div class="sort-row">
+        <button class:sort-active={sortMode === "manual"} onclick={() => setSortMode("manual")}>Manual</button>
+        <button class:sort-active={sortMode === "alphabetical"} onclick={() => setSortMode("alphabetical")}>A-Z</button>
+        <button class:sort-active={sortMode === "recent"} onclick={() => setSortMode("recent")}>Recent</button>
+      </div>
+    {/if}
     <div class="project-list">
       {#if allProjects.length === 0}
         <div class="empty">No projects yet.</div>
@@ -582,72 +657,81 @@
     </div>
   </section>
 
-  <section class="panel compact">
-    <input
-      id="comment"
-      bind:value={commentText}
-      disabled={!appState.active_project}
-      placeholder="Comment"
-      onkeydown={(event) => isEnterSubmit(event) && saveComment()}
-    />
-    <button onclick={saveComment} disabled={!appState.active_project}>Save</button>
-    <button onclick={clearComment} disabled={!appState.active_project || !commentText}>Clear</button>
-  </section>
-
-  <section class="panel compact">
-    <input
-      bind:value={newProjectName}
-      placeholder="Add project"
-      onkeydown={(event) => isEnterSubmit(event) && addProject()}
-    />
-    <button onclick={addProject}>Add</button>
-  </section>
-
-  <section class="panel compact">
-    <input
-      bind:value={quickName}
-      placeholder="Quick project"
-      onkeydown={(event) => isEnterSubmit(event) && trackQuick(false)}
-    />
-    <button onclick={() => trackQuick(false)}>Track</button>
-  </section>
-
-  <section class="actions">
-    <button onclick={generateTimesheet}>Generate timesheet</button>
-    <button onclick={() => invoke("open_log_file")}>Open log file</button>
-    <button onclick={resetTimesheet}>Reset timesheet</button>
-    <button onclick={resetProjects}>Reset projects</button>
-  </section>
-
-  <section class="panel footer">
-    <div class="toggle-row">
-      <span>Always on top</span>
-      <button aria-label="Always on top" class:toggle-on={alwaysOnTop} class="toggle" onclick={toggleAlwaysOnTop}><span></span></button>
-    </div>
-    <div class="toggle-row">
-      <span>Open QuickPanel on start</span>
-      <button aria-label="Open QuickPanel on start" class:toggle-on={openOnStart} class="toggle" onclick={toggleOpenOnStart}><span></span></button>
-    </div>
-    <div class="opacity-row">
-      <span>Opacity</span>
+  {#if quickPanelMode === "normal"}
+    <section class="panel compact">
       <input
-        type="range"
-        min={Math.round(MIN_OPACITY * 100)}
-        max="100"
-        step="1"
-        value={Math.round(quickPanelOpacity * 100)}
-        oninput={(event) => {
-          const target = event.currentTarget as HTMLInputElement;
-          quickPanelOpacity = Number(target.value) / 100;
-          queueSettingsSave();
-        }}
+        id="comment"
+        bind:value={commentText}
+        disabled={!appState.active_project}
+        placeholder="Comment"
+        onkeydown={(event) => isEnterSubmit(event) && saveComment()}
       />
-      <strong>{Math.round(quickPanelOpacity * 100)}%</strong>
-    </div>
-    <div class="feedback">
-      <button onclick={openAbout}>About</button>
-    </div>
-  </section>
+      <button onclick={saveComment} disabled={!appState.active_project}>Save</button>
+      <button onclick={clearComment} disabled={!appState.active_project || !commentText}>Clear</button>
+    </section>
+
+    <section class="panel compact">
+      <input
+        bind:value={newProjectName}
+        placeholder="Add project"
+        onkeydown={(event) => isEnterSubmit(event) && addProject()}
+      />
+      <button onclick={addProject}>Add</button>
+    </section>
+
+    <section class="panel compact">
+      <input
+        bind:value={quickName}
+        placeholder="Quick project"
+        onkeydown={(event) => isEnterSubmit(event) && trackQuick(false)}
+      />
+      <button onclick={() => trackQuick(false)}>Track</button>
+    </section>
+
+    <section class="actions">
+      <button onclick={() => generateTimesheetExport("today")}>Today</button>
+      <button onclick={() => generateTimesheetExport("week")}>Weekly</button>
+      <button onclick={() => generateTimesheetExport("all")}>All data</button>
+      <button onclick={() => generateTimesheetExport("today", "lite")}>Generate lite</button>
+      <button onclick={() => invoke("open_log_file")}>Open log file</button>
+      <button onclick={resetTimesheet}>Reset timesheet</button>
+      <button onclick={resetProjects}>Reset projects</button>
+    </section>
+
+    <section class="panel footer">
+      <div class="toggle-row">
+        <span>Always on top</span>
+        <button aria-label="Always on top" class:toggle-on={alwaysOnTop} class="toggle" onclick={toggleAlwaysOnTop}><span></span></button>
+      </div>
+      <div class="toggle-row">
+        <span>Open QuickPanel on start</span>
+        <button aria-label="Open QuickPanel on start" class:toggle-on={openOnStart} class="toggle" onclick={toggleOpenOnStart}><span></span></button>
+      </div>
+      <div class="toggle-row">
+        <span>Compact mode</span>
+        <button aria-label="Compact mode" class:toggle-on={quickPanelMode === "compact"} class="toggle" onclick={toggleQuickPanelMode}><span></span></button>
+      </div>
+      <div class="opacity-row">
+        <span>Opacity</span>
+        <input
+          type="range"
+          min={Math.round(MIN_OPACITY * 100)}
+          max="100"
+          step="1"
+          value={Math.round(quickPanelOpacity * 100)}
+          oninput={(event) => {
+            const target = event.currentTarget as HTMLInputElement;
+            quickPanelOpacity = Number(target.value) / 100;
+            queueSettingsSave();
+          }}
+        />
+        <strong>{Math.round(quickPanelOpacity * 100)}%</strong>
+      </div>
+      <div class="feedback">
+        <button onclick={openAbout}>About</button>
+      </div>
+    </section>
+  {/if}
 
   {#if dialogOpen}
     <div class="dialog-backdrop">
@@ -780,6 +864,15 @@
     user-select: none;
   }
 
+  .header-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .compact-header {
+    padding-block: 6px;
+  }
+
   .quickpanel-drag {
     min-width: 0;
     flex: 1;
@@ -828,6 +921,10 @@
     overflow: hidden;
   }
 
+  .compact-shell .project-panel {
+    padding-bottom: 2px;
+  }
+
   .sort-row {
     display: flex;
     gap: 4px;
@@ -855,6 +952,11 @@
     padding-top: 3px;
     padding-bottom: 3px;
     overflow-y: auto;
+  }
+
+  .compact-shell .project-list {
+    padding-top: 0;
+    padding-bottom: 0;
   }
 
   .project-row {

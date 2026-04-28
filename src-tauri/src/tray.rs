@@ -112,6 +112,25 @@ fn build_menu(app: &AppHandle) -> Result<Menu<Wry>, Box<dyn std::error::Error>> 
         None::<&str>,
     )?)?;
 
+    let panel_mode_sub = Submenu::with_id(app, "panel_mode", "QuickPanel mode", true)?;
+    panel_mode_sub.append(&CheckMenuItem::with_id(
+        app,
+        "qp_mode::normal",
+        "Normal",
+        true,
+        settings.quickpanel_mode == "normal",
+        None::<&str>,
+    )?)?;
+    panel_mode_sub.append(&CheckMenuItem::with_id(
+        app,
+        "qp_mode::compact",
+        "Compact",
+        true,
+        settings.quickpanel_mode == "compact",
+        None::<&str>,
+    )?)?;
+    menu.append(&panel_mode_sub)?;
+
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
     // Project checkboxes (permanent + ad-hoc)
@@ -190,13 +209,36 @@ fn build_menu(app: &AppHandle) -> Result<Menu<Wry>, Box<dyn std::error::Error>> 
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
     // Timesheet and log actions
-    menu.append(&MenuItem::with_id(
+    let timesheet_sub = Submenu::with_id(app, "timesheet_menu", "Generate timesheet", true)?;
+    timesheet_sub.append(&MenuItem::with_id(
         app,
-        "generate_sheet",
-        "Generate timesheet",
+        "generate_sheet::today",
+        "Today",
         true,
         None::<&str>,
     )?)?;
+    timesheet_sub.append(&MenuItem::with_id(
+        app,
+        "generate_sheet::week",
+        "Weekly",
+        true,
+        None::<&str>,
+    )?)?;
+    timesheet_sub.append(&MenuItem::with_id(
+        app,
+        "generate_sheet::all",
+        "All data",
+        true,
+        None::<&str>,
+    )?)?;
+    timesheet_sub.append(&MenuItem::with_id(
+        app,
+        "generate_sheet::lite",
+        "Lite (today + yesterday)",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&timesheet_sub)?;
     menu.append(&MenuItem::with_id(
         app,
         "open_log",
@@ -268,6 +310,10 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         handle_select_by_id(app, id);
     } else if let Some(id) = id.strip_prefix("remove::") {
         handle_remove_by_id(app, id);
+    } else if let Some(id) = id.strip_prefix("generate_sheet::") {
+        handle_generate(app, id);
+    } else if let Some(id) = id.strip_prefix("qp_mode::") {
+        handle_quickpanel_mode(app, id);
     } else {
         match id {
             "set_comment" => show_input(app, "set_comment", "Set comment:"),
@@ -275,7 +321,6 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             "quick_project" => show_input(app, "quick_project", "Quick project:"),
             "open_quickpanel" => show_quickpanel(app),
             "update_available" => handle_update_available(app),
-            "generate_sheet" => handle_generate(app),
             "reset_sheet" => handle_reset_sheet(app),
             "reset_projects" => handle_reset_projects(app),
             "open_log" => handle_open_log(app),
@@ -287,6 +332,24 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             _ => {}
         }
     }
+}
+
+fn handle_quickpanel_mode(app: &AppHandle, mode: &str) {
+    if mode != "normal" && mode != "compact" {
+        return;
+    }
+
+    let state = app.state::<AppState>();
+    let mut settings = state.settings.lock().unwrap();
+    if settings.quickpanel_mode == mode {
+        return;
+    }
+
+    settings.quickpanel_mode = mode.to_string();
+    crate::settings::save(&state.data_dir, &settings);
+    drop(settings);
+    rebuild_menu(app);
+    emit_state_changed(app);
 }
 
 fn handle_select_by_id(app: &AppHandle, id: &str) {
@@ -411,8 +474,8 @@ fn show_input(app: &AppHandle, mode: &str, title: &str) {
     }
 }
 
-fn handle_generate(app: &AppHandle) {
-    log!("tray generate timesheet");
+fn handle_generate(app: &AppHandle, mode: &str) {
+    log!("tray generate timesheet mode={}", mode);
     let state = app.state::<AppState>();
 
     // Log current state for an accurate timesheet
@@ -420,7 +483,15 @@ fn handle_generate(app: &AppHandle) {
     let comment = state.active_comment.lock().unwrap().clone();
     logger::log_new_entry(&state.data_dir, &active, &comment);
 
-    match timesheet::generate(&state.data_dir) {
+    let options = match mode {
+        "today" => timesheet::TimesheetOptions::full(timesheet::TimesheetRange::Today),
+        "week" => timesheet::TimesheetOptions::full(timesheet::TimesheetRange::Week),
+        "all" => timesheet::TimesheetOptions::full(timesheet::TimesheetRange::All),
+        "lite" => timesheet::TimesheetOptions::lite(),
+        _ => return,
+    };
+
+    match timesheet::generate(&state.data_dir, options) {
         Ok(path) => {
             use tauri_plugin_opener::OpenerExt;
             let _ = app.opener().open_path(path.to_str().unwrap(), None::<&str>);

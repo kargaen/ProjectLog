@@ -14,6 +14,10 @@ fn default_project_sort_mode() -> String {
     "manual".to_string()
 }
 
+fn default_quickpanel_mode() -> String {
+    "normal".to_string()
+}
+
 fn normalize_opacity(value: f64) -> f64 {
     value.clamp(0.35, 1.0)
 }
@@ -22,6 +26,13 @@ fn normalize_sort_mode(value: &str) -> String {
     match value {
         "alphabetical" | "recent" | "manual" => value.to_string(),
         _ => default_project_sort_mode(),
+    }
+}
+
+fn normalize_quickpanel_mode(value: &str) -> String {
+    match value {
+        "normal" | "compact" => value.to_string(),
+        _ => default_quickpanel_mode(),
     }
 }
 
@@ -37,6 +48,8 @@ pub struct UiSettings {
     pub quickpanel_opacity: f64,
     #[serde(default = "default_project_sort_mode")]
     pub project_sort_mode: String,
+    #[serde(default = "default_quickpanel_mode")]
+    pub quickpanel_mode: String,
     #[serde(default)]
     pub project_manual_order: Vec<String>,
     #[serde(default)]
@@ -54,6 +67,7 @@ impl Default for UiSettings {
             quickpanel_height: None,
             quickpanel_opacity: default_quickpanel_opacity(),
             project_sort_mode: "manual".to_string(),
+            quickpanel_mode: default_quickpanel_mode(),
             project_manual_order: Vec::new(),
             project_recent_usage: HashMap::new(),
         }
@@ -74,6 +88,7 @@ pub fn load(data_dir: &Path) -> UiSettings {
                 UiSettings {
                     quickpanel_opacity: normalize_opacity(settings.quickpanel_opacity),
                     project_sort_mode: normalize_sort_mode(&settings.project_sort_mode),
+                    quickpanel_mode: normalize_quickpanel_mode(&settings.quickpanel_mode),
                     ..settings
                 }
             }
@@ -95,6 +110,7 @@ pub fn save(data_dir: &Path, settings: &UiSettings) {
     let normalized = UiSettings {
         quickpanel_opacity: normalize_opacity(settings.quickpanel_opacity),
         project_sort_mode: normalize_sort_mode(&settings.project_sort_mode),
+        quickpanel_mode: normalize_quickpanel_mode(&settings.quickpanel_mode),
         ..settings.clone()
     };
     match serde_json::to_string_pretty(&normalized) {
@@ -151,6 +167,7 @@ mod tests {
             quickpanel_height: Some(640.0),
             quickpanel_opacity: 0.5,
             project_sort_mode: "recent".to_string(),
+            quickpanel_mode: "compact".to_string(),
             project_manual_order: vec!["Alpha".to_string(), "Beta".to_string()],
             project_recent_usage: HashMap::from([("Alpha".to_string(), 123)]),
         };
@@ -166,6 +183,7 @@ mod tests {
         assert_eq!(actual.quickpanel_height, expected.quickpanel_height);
         assert_eq!(actual.quickpanel_opacity, expected.quickpanel_opacity);
         assert_eq!(actual.project_sort_mode, expected.project_sort_mode);
+        assert_eq!(actual.quickpanel_mode, expected.quickpanel_mode);
         assert_eq!(actual.project_manual_order, expected.project_manual_order);
         assert_eq!(actual.project_recent_usage, expected.project_recent_usage);
         let _ = fs::remove_dir_all(dir);
@@ -180,7 +198,8 @@ mod tests {
   "always_on_top": false,
   "open_on_start": false,
   "quickpanel_opacity": 1.0,
-  "project_sort_mode": ""
+  "project_sort_mode": "",
+  "quickpanel_mode": ""
 }
 "#,
         )
@@ -188,6 +207,7 @@ mod tests {
 
         let settings = load(&dir);
         assert_eq!(settings.project_sort_mode, "manual");
+        assert_eq!(settings.quickpanel_mode, "normal");
         let _ = fs::remove_dir_all(dir);
     }
 }
