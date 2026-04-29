@@ -1,0 +1,12 @@
+[
+  {
+    "key": "f6",
+    "command": "workbench.action.tasks.runTask",
+    "args": "ProjectLog: Save WIP"
+  },
+  {
+    "key": "shift+f6",
+    "command": "workbench.action.tasks.runTask",
+    "args": "ProjectLog: Save + New Version"
+  }
+]

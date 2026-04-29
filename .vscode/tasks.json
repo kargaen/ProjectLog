@@ -23,7 +23,7 @@
       "problemMatcher": []
     },
     {
-      "label": "ProjectLog: Push WIP",
+      "label": "ProjectLog: Save + New Version",
       "type": "shell",
       "command": "powershell",
       "args": [
@@ -31,7 +31,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}/scripts/push-wip.ps1"
+        "${workspaceFolder}/scripts/push-release.ps1"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -41,15 +41,6 @@
         "panel": "shared",
         "clear": true
       },
-      "problemMatcher": []
-    },
-    {
-      "label": "ProjectLog: Save + Push WIP",
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "ProjectLog: Save WIP",
-        "ProjectLog: Push WIP"
-      ],
       "problemMatcher": []
     }
   ]
