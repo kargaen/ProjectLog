@@ -79,22 +79,25 @@ jobs:
               <main>
                 <p><a href="./">ProjectLog</a></p>
                 <h1>Privacy Policy</h1>
-                <p>This privacy policy applies to desktop applications published by Karsten Garborg unless a project states otherwise.</p>
+                <p>This privacy policy applies to ProjectLog.</p>
 
-                <h2>What these apps store</h2>
-                <p>These apps may store user-entered content and application settings locally on the user's device in order to provide their core functionality. Depending on the project, this may include items such as project names, comments, preferences, window state, and local logs.</p>
+                <h2>What ProjectLog stores</h2>
+                <p>ProjectLog stores data only on the user's local machine.</p>
+                <p>This locally stored data may include project names entered by the user, comments entered by the user, timestamps for when the user starts working on a selected project, and local application settings and related local log data needed for the app to function.</p>
+                <p>ProjectLog does not automatically track work in the background. The user is responsible for selecting a project and entering any related text themselves.</p>
+                <p>The user can also reset stored data through the app.</p>
 
-                <h2>What these apps do not do</h2>
-                <p>These apps do not intentionally collect, sell, or share personal data with the developer or third parties for analytics, advertising, profiling, or tracking.</p>
+                <h2>What ProjectLog does not do</h2>
+                <p>ProjectLog does not send project data, comments, timestamps, or local logs to the developer, to a cloud service, or to third parties.</p>
+                <p>ProjectLog does not sell, share, or hand over user data to external parties.</p>
+                <p>ProjectLog does not submit timesheet data to any finance, ERP, or reporting system. The user is responsible for entering their own timesheet information into whatever system they use.</p>
 
                 <h2>External services</h2>
-                <p>If a user chooses features that open external services, the user's device may connect directly to those services. Examples may include GitHub repository and release pages, email links, and application update endpoints. Those third-party services operate under their own terms and privacy policies.</p>
-
-                <h2>Updates</h2>
-                <p>Some apps may check for and download updates from GitHub-hosted release endpoints or other clearly identified release infrastructure. This network activity is used only to provide update functionality.</p>
+                <p>ProjectLog only connects to the network for its auto-update feature.</p>
+                <p>When enabled and used, the app may contact GitHub release update endpoints to check for and download updates. This connection is used only for application update functionality.</p>
 
                 <h2>Contact</h2>
-                <p>Questions about privacy for these projects can be directed to <a href="mailto:karga@karga.dk">karga@karga.dk</a>.</p>
+                <p>If you have questions about this privacy policy, you can open an issue on <a href="https://github.com/kargaen/ProjectLog/issues">GitHub</a>.</p>
               </main>
             </body>
           </html>

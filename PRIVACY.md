@@ -1,32 +1,38 @@
 # Privacy Policy
 
-This privacy policy applies to desktop applications published by Karsten Garborg unless a project states otherwise.
+This privacy policy applies to ProjectLog.
 
-## What these apps store
+## What ProjectLog stores
 
-These apps may store user-entered content and application settings locally on the user's device in order to provide their core functionality. Depending on the project, this may include items such as project names, comments, preferences, window state, and local logs.
+ProjectLog stores data only on the user's local machine.
 
-## What these apps do not do
+This locally stored data may include:
 
-These apps do not intentionally collect, sell, or share personal data with the developer or third parties for analytics, advertising, profiling, or tracking.
+- Project names entered by the user
+- Comments entered by the user
+- Timestamps for when the user starts working on a selected project
+- Local application settings and related local log data needed for the app to function
+
+ProjectLog does not automatically track work in the background. The user is responsible for selecting a project and entering any related text themselves.
+
+The user can also reset stored data through the app.
+
+## What ProjectLog does not do
+
+ProjectLog does not send project data, comments, timestamps, or local logs to the developer, to a cloud service, or to third parties.
+
+ProjectLog does not sell, share, or hand over user data to external parties.
+
+ProjectLog does not submit timesheet data to any finance, ERP, or reporting system. The user is responsible for entering their own timesheet information into whatever system they use.
 
 ## External services
 
-If a user chooses features that open external services, the user's device may connect directly to those services. Examples may include:
+ProjectLog only connects to the network for its auto-update feature.
 
-- GitHub repository and release pages
-- Email links
-- Application update endpoints
-
-Those third-party services operate under their own terms and privacy policies.
-
-## Updates
-
-Some apps may check for and download updates from GitHub-hosted release endpoints or other clearly identified release infrastructure. This network activity is used only to provide update functionality.
+The app may contact GitHub release update endpoints to check for and download updates. This connection is used only for application update functionality.
 
 ## Contact
 
-Questions about privacy for these projects can be directed to:
+If you have questions about this privacy policy, you can open an issue on GitHub:
 
-- `karga@karga.dk`
-
+- https://github.com/kargaen/ProjectLog/issues
