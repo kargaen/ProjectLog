@@ -12,6 +12,7 @@
   import { check, type Update } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { createLogger } from "./lib/logger";
+  import appIcon from "../icon.svg";
 
   const log = createLogger("quickpanel");
   const MIN_QUICKPANEL_WIDTH = 300;
@@ -85,6 +86,7 @@
   let draggedProject = $state<string | null>(null);
   let dropTargetProject = $state<string | null>(null);
   let dropPosition = $state<"before" | "after">("before");
+  let effectiveSortMode = $derived<SortMode>(quickPanelMode === "compact" ? "manual" : sortMode);
 
   let dialogOpen = $state(false);
   let aboutOpen = $state(false);
@@ -423,14 +425,14 @@
   }
 
   function handleDragStart(project: string) {
-    if (sortMode !== "manual") return;
+    if (effectiveSortMode !== "manual") return;
     draggedProject = project;
     dropTargetProject = project;
     dropPosition = "before";
   }
 
   function handleDragOver(event: MouseEvent, project: string) {
-    if (sortMode !== "manual" || !draggedProject) return;
+    if (effectiveSortMode !== "manual" || !draggedProject) return;
     const row = event.currentTarget as HTMLElement | null;
     if (row) {
       const rect = row.getBoundingClientRect();
@@ -440,7 +442,7 @@
   }
 
   function finishDrag() {
-    if (sortMode !== "manual" || !draggedProject) return;
+    if (effectiveSortMode !== "manual" || !draggedProject) return;
     const droppedProject = draggedProject;
     const project = dropTargetProject;
     if (!project || droppedProject === project) {
@@ -531,10 +533,10 @@
 
   let allProjects = $derived.by(() => {
     const combined = [...appState.projects, ...appState.adhoc_projects];
-    if (sortMode === "alphabetical") {
+    if (effectiveSortMode === "alphabetical") {
       return [...combined].sort((a, b) => a.localeCompare(b));
     }
-    if (sortMode === "recent") {
+    if (effectiveSortMode === "recent") {
       return [...combined].sort((a, b) => (recentProjects[b] ?? 0) - (recentProjects[a] ?? 0) || a.localeCompare(b));
     }
     return manualOrder.filter((project) => combined.includes(project));
@@ -561,7 +563,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <header class="quickpanel-header">
       <div class="quickpanel-drag" onmousedown={startWindowDrag}>
-        <img class="logo" src="/icon.svg" alt="ProjectLog" />
+        <img class="logo" src={appIcon} alt="ProjectLog" />
         <div>
           <h1>ProjectLog QuickPanel</h1>
           <p>{appState.active_project || "No active project"}</p>
@@ -574,11 +576,6 @@
         <button
           class="ghost"
           onmousedown={(event) => event.stopPropagation()}
-          onclick={toggleQuickPanelMode}
-        >Compact</button>
-        <button
-          class="ghost"
-          onmousedown={(event) => event.stopPropagation()}
           onclick={() => getCurrentWindow().hide()}
         >Hide</button>
       </div>
@@ -587,18 +584,13 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <header class="quickpanel-header compact-header">
       <div class="quickpanel-drag" onmousedown={startWindowDrag}>
-        <img class="logo" src="/icon.svg" alt="ProjectLog" />
+        <img class="logo" src={appIcon} alt="ProjectLog" />
         <div>
           <h1>ProjectLog Compact</h1>
           <p>{appState.active_project || "Pick a project"}</p>
         </div>
       </div>
       <div class="header-actions">
-        <button
-          class="ghost"
-          onmousedown={(event) => event.stopPropagation()}
-          onclick={toggleQuickPanelMode}
-        >Normal</button>
         <button
           class="ghost"
           onmousedown={(event) => event.stopPropagation()}
@@ -624,14 +616,14 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class:active={appState.active_project === project}
-          class:manual-sort={sortMode === "manual"}
+          class:manual-sort={effectiveSortMode === "manual"}
           class:dragging={draggedProject === project}
           class:drop-target={dropTargetProject === project}
           class:drop-after={dropTargetProject === project && dropPosition === "after"}
           class="project-row"
           onmousemove={(event) => handleDragOver(event, project)}
         >
-          {#if sortMode === "manual"}
+          {#if effectiveSortMode === "manual"}
             <button
               class="drag-handle"
               aria-label="Reorder project"
@@ -698,7 +690,10 @@
       <button onclick={resetProjects}>Reset projects</button>
     </section>
 
-    <section class="panel footer">
+  {/if}
+
+  <section class="panel footer" class:compact-footer={quickPanelMode === "compact"}>
+    {#if quickPanelMode === "normal"}
       <div class="toggle-row">
         <span>Always on top</span>
         <button aria-label="Always on top" class:toggle-on={alwaysOnTop} class="toggle" onclick={toggleAlwaysOnTop}><span></span></button>
@@ -706,10 +701,6 @@
       <div class="toggle-row">
         <span>Open QuickPanel on start</span>
         <button aria-label="Open QuickPanel on start" class:toggle-on={openOnStart} class="toggle" onclick={toggleOpenOnStart}><span></span></button>
-      </div>
-      <div class="toggle-row">
-        <span>Compact mode</span>
-        <button aria-label="Compact mode" class:toggle-on={quickPanelMode === "compact"} class="toggle" onclick={toggleQuickPanelMode}><span></span></button>
       </div>
       <div class="opacity-row">
         <span>Opacity</span>
@@ -730,8 +721,12 @@
       <div class="feedback">
         <button onclick={openAbout}>About</button>
       </div>
-    </section>
-  {/if}
+    {/if}
+    <div class="toggle-row">
+      <span>Compact mode</span>
+      <button aria-label="Compact mode" class:toggle-on={quickPanelMode === "compact"} class="toggle" onclick={toggleQuickPanelMode}><span></span></button>
+    </div>
+  </section>
 
   {#if dialogOpen}
     <div class="dialog-backdrop">
