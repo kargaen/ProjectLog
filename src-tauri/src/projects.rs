@@ -56,4 +56,28 @@ mod tests {
         assert_eq!(load(&dir), projects);
         let _ = fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn load_returns_empty_when_file_is_missing() {
+        let dir = temp_dir("projects-missing");
+
+        assert!(load(&dir).is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_skips_blank_lines() {
+        let dir = temp_dir("projects-blanks");
+        fs::write(
+            dir.join("projects.dat"),
+            "Alpha\n\nBeta\n\nGamma\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            load(&dir),
+            vec!["Alpha".to_string(), "Beta".to_string(), "Gamma".to_string()]
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
 }

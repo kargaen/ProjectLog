@@ -1,13 +1,11 @@
 use std::sync::atomic::Ordering;
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use image::GenericImageView;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 
 use crate::{log, log_debug, log_warn};
-use crate::{logger, projects, timesheet, AppState};
+use crate::{logger, projects, AppState};
 
 fn sorted_project_lists(
     projects_list: &[String],
@@ -402,13 +400,9 @@ fn remember_project_use(app: &AppHandle, project: &str) {
         return;
     }
 
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0);
-
     let state = app.state::<AppState>();
     let mut settings = state.settings.lock().unwrap();
+    let timestamp = crate::next_recent_usage_timestamp(&settings);
     settings
         .project_recent_usage
         .insert(project.to_string(), timestamp);

@@ -1,0 +1,326 @@
+import type { Page } from "@playwright/test";
+
+type MockProjectState = {
+  app_version: string;
+  active_project: string;
+  active_comment: string;
+  projects: string[];
+  adhoc_projects: string[];
+  update_available: boolean;
+  settings: {
+    always_on_top: boolean;
+    open_on_start: boolean;
+    quickpanel_x: number | null;
+    quickpanel_y: number | null;
+    quickpanel_width: number | null;
+    quickpanel_height: number | null;
+    quickpanel_opacity: number;
+    project_sort_mode: "manual" | "alphabetical" | "recent";
+    quickpanel_mode: "normal" | "compact";
+    project_manual_order: string[];
+    project_recent_usage: Record<string, number>;
+    timesheet_rounding_enabled: boolean;
+  };
+};
+
+type MockPreviewRequest = {
+  range: "today" | "week" | "all";
+  format: "full" | "recent";
+};
+
+type MockPreview = {
+  title: string;
+  sheets: Array<{
+    name: string;
+    columns: string[];
+    rows: Array<{
+      label: string;
+      values: number[];
+      total: number;
+      is_comment: boolean;
+      is_total: boolean;
+    }>;
+  }>;
+};
+
+type MockOptions = {
+  currentWindowLabel?: string;
+  initialPreviewRequest?: MockPreviewRequest | null;
+  previewResponse?: MockPreview;
+};
+
+const defaultState: MockProjectState = {
+  app_version: "2.1.0",
+  active_project: "",
+  active_comment: "",
+  projects: ["Jot", "Sous Chef", "Test 5"],
+  adhoc_projects: [],
+  update_available: false,
+  settings: {
+    always_on_top: false,
+    open_on_start: false,
+    quickpanel_x: null,
+    quickpanel_y: null,
+    quickpanel_width: null,
+    quickpanel_height: null,
+    quickpanel_opacity: 1,
+    project_sort_mode: "manual",
+    quickpanel_mode: "normal",
+    project_manual_order: ["Jot", "Sous Chef", "Test 5"],
+    project_recent_usage: {},
+    timesheet_rounding_enabled: false,
+  },
+};
+
+export async function installTauriMocks(
+  page: Page,
+  initialState?: Partial<MockProjectState>,
+  options?: MockOptions
+) {
+  const mergedState: MockProjectState = {
+    ...defaultState,
+    ...initialState,
+    projects: initialState?.projects ?? defaultState.projects,
+    adhoc_projects: initialState?.adhoc_projects ?? defaultState.adhoc_projects,
+    settings: {
+      ...defaultState.settings,
+      ...initialState?.settings,
+      project_manual_order:
+        initialState?.settings?.project_manual_order ?? initialState?.projects ?? defaultState.settings.project_manual_order,
+      project_recent_usage:
+        initialState?.settings?.project_recent_usage ?? defaultState.settings.project_recent_usage,
+    },
+  };
+
+  const previewResponse: MockPreview = options?.previewResponse ?? {
+    title: "Full timesheet",
+    sheets: [
+      {
+        name: "2026-18",
+        columns: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        rows: [
+          {
+            label: "Alpha",
+            values: [1, 0, 0, 0, 0, 0, 0],
+            total: 1,
+            is_comment: false,
+            is_total: false,
+          },
+          {
+            label: "Total",
+            values: [1, 0, 0, 0, 0, 0, 0],
+            total: 1,
+            is_comment: false,
+            is_total: true,
+          },
+        ],
+      },
+    ],
+  };
+
+  await page.addInitScript((
+    state: MockProjectState,
+    currentWindowLabel: string,
+    initialPreviewRequest: MockPreviewRequest | null,
+    initialPreviewResponse: MockPreview
+  ) => {
+    const clonedState = JSON.parse(JSON.stringify(state));
+    const callbacks = new Map<number, (payload: unknown) => void>();
+    const eventHandlers = new Map<string, number[]>();
+    let callbackId = 1;
+    let eventId = 1;
+    let previewRequest = initialPreviewRequest;
+    const previewResponse = initialPreviewResponse;
+    let recentCounter = Math.max(
+      0,
+      ...Object.values(clonedState.settings.project_recent_usage || {})
+    );
+
+    function emitEvent(event: string, payload?: unknown) {
+      const handlers = eventHandlers.get(event) || [];
+      for (const id of handlers) {
+        const callback = callbacks.get(id);
+        callback?.({ event, id: eventId++, payload });
+      }
+    }
+
+    function nextRecentStamp() {
+      recentCounter += 1;
+      return recentCounter;
+    }
+
+    function handleSelectProject(project: string) {
+      if (clonedState.active_project === project) {
+        clonedState.active_project = "";
+      } else {
+        clonedState.active_project = project;
+        clonedState.settings.project_recent_usage[project] = nextRecentStamp();
+      }
+      clonedState.active_comment = "";
+    }
+
+    (window as Window & {
+      __TAURI_INTERNALS__?: Record<string, unknown>;
+      __TAURI_EVENT_PLUGIN_INTERNALS__?: Record<string, unknown>;
+    }).__TAURI_INTERNALS__ = {
+      metadata: {
+        currentWindow: { label: currentWindowLabel },
+        currentWebview: { label: currentWindowLabel, windowLabel: currentWindowLabel },
+      },
+      convertFileSrc: (path: string) => path,
+      transformCallback: (fn: (payload: unknown) => void) => {
+        const id = callbackId++;
+        callbacks.set(id, fn);
+        return id;
+      },
+      unregisterCallback: (id: number) => {
+        callbacks.delete(id);
+      },
+      runCallback: (id: number, payload: unknown) => {
+        callbacks.get(id)?.(payload);
+      },
+      callbacks,
+      invoke: async (cmd: string, args: Record<string, unknown> = {}) => {
+        switch (cmd) {
+          case "get_state":
+            return JSON.parse(JSON.stringify(clonedState));
+          case "get_timesheet_preview_request":
+            return previewRequest;
+          case "preview_timesheet":
+            return JSON.parse(JSON.stringify(previewResponse));
+          case "select_project":
+            handleSelectProject(String(args.project ?? ""));
+            return null;
+          case "add_project": {
+            const value = String(args.value ?? "").trim();
+            if (value && !clonedState.projects.includes(value)) {
+              clonedState.projects.push(value);
+              clonedState.settings.project_manual_order.push(value);
+            }
+            return null;
+          }
+          case "quick_project": {
+            const value = String(args.value ?? "").trim();
+            if (value) {
+              if (!clonedState.projects.includes(value) && !clonedState.adhoc_projects.includes(value)) {
+                clonedState.adhoc_projects.push(value);
+              }
+              clonedState.active_project = value;
+              clonedState.active_comment = "";
+              clonedState.settings.project_recent_usage[value] = nextRecentStamp();
+            }
+            return null;
+          }
+          case "set_comment":
+            clonedState.active_comment = String(args.value ?? "");
+            return null;
+          case "remove_project": {
+            const project = String(args.project ?? "");
+            clonedState.projects = clonedState.projects.filter((p) => p !== project);
+            clonedState.adhoc_projects = clonedState.adhoc_projects.filter((p) => p !== project);
+            clonedState.settings.project_manual_order =
+              clonedState.settings.project_manual_order.filter((p) => p !== project);
+            delete clonedState.settings.project_recent_usage[project];
+            if (clonedState.active_project === project) {
+              clonedState.active_project = "";
+              clonedState.active_comment = "";
+            }
+            return null;
+          }
+          case "save_ui_settings":
+            clonedState.settings.always_on_top = Boolean(args.alwaysOnTop);
+            clonedState.settings.open_on_start = Boolean(args.openOnStart);
+            clonedState.settings.quickpanel_opacity = Number(args.quickpanelOpacity);
+            clonedState.settings.project_sort_mode = String(args.projectSortMode) as MockProjectState["settings"]["project_sort_mode"];
+            clonedState.settings.quickpanel_mode = String(args.quickpanelMode) as MockProjectState["settings"]["quickpanel_mode"];
+            clonedState.settings.project_manual_order = [...((args.projectManualOrder as string[]) ?? [])];
+            clonedState.settings.project_recent_usage = {
+              ...((args.projectRecentUsage as Record<string, number>) ?? {}),
+            };
+            clonedState.settings.timesheet_rounding_enabled = Boolean(args.timesheetRoundingEnabled);
+            return null;
+          case "save_quickpanel_bounds":
+          case "set_update_available":
+          case "log_from_frontend":
+          case "generate_timesheet_export":
+          case "reset_timesheet":
+          case "reset_projects":
+          case "open_log_file":
+          case "open_diagnostic_log":
+          case "open_feedback":
+          case "open_github_issues":
+          case "open_portfolio":
+          case "open_project_homepage":
+          case "open_release_notes":
+            return null;
+          case "open_timesheet_preview_window":
+            previewRequest = {
+              range: String(args.range ?? "all") as MockPreviewRequest["range"],
+              format: String(args.format ?? "full") as MockPreviewRequest["format"],
+            };
+            emitEvent("show-timesheet-preview", previewRequest);
+            return null;
+          case "plugin:updater|check":
+            return null;
+          case "plugin:event|listen": {
+            const event = String(args.event ?? "");
+            const handler = Number(args.handler);
+            const list = eventHandlers.get(event) ?? [];
+            list.push(handler);
+            eventHandlers.set(event, list);
+            return handler;
+          }
+          case "plugin:event|unlisten": {
+            const event = String(args.event ?? "");
+            const id = Number(args.eventId);
+            const list = eventHandlers.get(event) ?? [];
+            eventHandlers.set(
+              event,
+              list.filter((handlerId) => handlerId !== id)
+            );
+            return null;
+          }
+          case "plugin:event|emit":
+            emitEvent(String(args.event ?? ""), args.payload);
+            return null;
+          case "plugin:window|set_min_size":
+          case "plugin:window|set_size":
+          case "plugin:window|set_position":
+          case "plugin:window|set_always_on_top":
+          case "plugin:window|show":
+          case "plugin:window|hide":
+          case "plugin:window|set_focus":
+          case "plugin:window|close":
+          case "plugin:window|start_dragging":
+            return null;
+          case "plugin:window|outer_size":
+            return { width: 430, height: 650 };
+          case "plugin:window|outer_position":
+            return { x: 100, y: 100 };
+          case "plugin:window|available_monitors":
+            return [];
+          case "plugin:window|primary_monitor":
+            return null;
+          default:
+            return null;
+        }
+      },
+    };
+
+    (window as Window & {
+      __TAURI_EVENT_PLUGIN_INTERNALS__?: Record<string, unknown>;
+    }).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+      unregisterListener: (event: string, id: number) => {
+        const list = eventHandlers.get(event) ?? [];
+        eventHandlers.set(
+          event,
+          list.filter((handlerId) => handlerId !== id)
+        );
+      },
+    };
+  },
+  mergedState,
+  options?.currentWindowLabel ?? "main",
+  options?.initialPreviewRequest ?? null,
+  previewResponse);
+}

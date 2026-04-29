@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use settings::UiSettings;
-use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, LogicalSize, Manager, State, WebviewWindowBuilder};
 use timesheet::{TimesheetFormat, TimesheetOptions, TimesheetPreview, TimesheetRange};
 
 pub struct AppState {
@@ -25,6 +25,7 @@ pub struct AppState {
     pub reminder_active: Arc<AtomicBool>,
     pub update_available: AtomicBool,
     pub settings: Mutex<UiSettings>,
+    timesheet_preview_request: Mutex<Option<TimesheetPreviewRequest>>,
 }
 
 #[derive(Serialize)]
@@ -36,6 +37,12 @@ struct ProjectLogState {
     adhoc_projects: Vec<String>,
     update_available: bool,
     settings: UiSettings,
+}
+
+#[derive(Clone, Serialize)]
+struct TimesheetPreviewRequest {
+    range: String,
+    format: String,
 }
 
 fn clean_input(value: &str) -> String {
@@ -99,17 +106,29 @@ fn migrate_legacy_files(data_dir: &PathBuf) {
     migrate_legacy_file(data_dir, "log.dat");
 }
 
+pub(crate) fn next_recent_usage_timestamp(settings: &UiSettings) -> u64 {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_micros() as u64)
+        .unwrap_or(0);
+
+    let highest_seen = settings
+        .project_recent_usage
+        .values()
+        .copied()
+        .max()
+        .unwrap_or(0);
+
+    now.max(highest_seen.saturating_add(1))
+}
+
 fn remember_project_use(state: &AppState, project: &str) {
     if project.is_empty() {
         return;
     }
 
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0);
-
     let mut settings = state.settings.lock().unwrap();
+    let timestamp = next_recent_usage_timestamp(&settings);
     settings
         .project_recent_usage
         .insert(project.to_string(), timestamp);
@@ -288,23 +307,23 @@ fn preview_timesheet(
 }
 
 #[tauri::command]
-pub(crate) fn open_timesheet_preview_window(
+fn get_timesheet_preview_request(state: State<AppState>) -> Option<TimesheetPreviewRequest> {
+    state.timesheet_preview_request.lock().unwrap().clone()
+}
+
+#[tauri::command]
+async fn open_timesheet_preview_window(
     range: String,
     format: String,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    log!("open_timesheet_preview_window range={} format={}", range, format);
     let options = parse_timesheet_options(&range, &format)?;
-    let (label, title) = match options.format {
-        TimesheetFormat::Recent => (
-            "timesheet-preview-recent",
-            "ProjectLog Timesheet: Yesterday + Today",
-        ),
-        TimesheetFormat::Full => (
-            "timesheet-preview-full",
-            "ProjectLog Timesheet: Full",
-        ),
-    };
     let preview = timesheet::preview(&app.state::<AppState>().data_dir, options)?;
+    let title = match options.format {
+        TimesheetFormat::Recent => "ProjectLog Timesheet: Yesterday + Today",
+        TimesheetFormat::Full => "ProjectLog Timesheet: Full",
+    };
     let max_columns = preview
         .sheets
         .iter()
@@ -320,28 +339,52 @@ pub(crate) fn open_timesheet_preview_window(
     let width = (300.0 + ((max_columns + 1) as f64 * 92.0)).clamp(760.0, 1360.0);
     let height = (220.0 + (max_rows as f64 * 26.0)).clamp(520.0, 880.0);
 
-    let query = format!("index.html?window=timesheet-preview&range={range}&format={format}");
+    *app.state::<AppState>().timesheet_preview_request.lock().unwrap() = Some(TimesheetPreviewRequest {
+        range: range.clone(),
+        format: format.clone(),
+    });
 
-    if let Some(window) = app.get_webview_window(label) {
+    if let Some(window) = app.get_webview_window("timesheet-preview") {
         let _ = window.set_title(title);
+        let _ = window.set_size(LogicalSize::new(width, height));
+        let _ = window.emit(
+            "show-timesheet-preview",
+            serde_json::json!({
+                "range": range,
+                "format": format,
+            }),
+        );
         let _ = window.show();
         let _ = window.set_focus();
-        let _ = window.eval(&format!(
-            "window.location.href = '/{}';",
-            query.replace('\\', "\\\\").replace('\'', "\\'")
-        ));
         return Ok(());
     }
 
-    WebviewWindowBuilder::new(&app, label, WebviewUrl::App(query.into()))
-        .title(title)
-        .inner_size(width, height)
-        .min_inner_size(640.0, 420.0)
-        .resizable(true)
-        .center()
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "timesheet-preview")
+        .ok_or_else(|| "Missing timesheet-preview window config.".to_string())?;
+
+    let window = WebviewWindowBuilder::from_config(&app, config)
+        .map_err(|e| e.to_string())?
         .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    let _ = window.set_title(title);
+    let _ = window.set_size(LogicalSize::new(width, height));
+    let _ = window.show();
+    let _ = window.set_focus();
+    let _ = window.emit(
+        "show-timesheet-preview",
+        serde_json::json!({
+            "range": range,
+            "format": format,
+        }),
+    );
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -591,6 +634,7 @@ pub fn run() {
                 reminder_active,
                 update_available: AtomicBool::new(false),
                 settings: Mutex::new(ui_settings),
+                timesheet_preview_request: Mutex::new(None),
             };
             app.manage(state);
 
@@ -628,6 +672,7 @@ pub fn run() {
             remove_project,
             generate_timesheet,
             preview_timesheet,
+            get_timesheet_preview_request,
             open_timesheet_preview_window,
             generate_timesheet_export,
             reset_timesheet,
@@ -666,4 +711,97 @@ pub fn run() {
             }
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn clean_input_collapses_whitespace_and_newlines() {
+        let actual = clean_input("  Alpha\tBeta\r\nGamma  ");
+
+        assert_eq!(actual, "Alpha Beta Gamma");
+    }
+
+    #[test]
+    fn clean_input_returns_empty_for_only_whitespace() {
+        let actual = clean_input(" \t\r\n  ");
+
+        assert_eq!(actual, "");
+    }
+
+    #[test]
+    fn parse_timesheet_options_accepts_full_all() {
+        let actual = parse_timesheet_options("all", "full").unwrap();
+
+        assert_eq!(
+            actual,
+            TimesheetOptions {
+                range: TimesheetRange::All,
+                format: TimesheetFormat::Full,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_timesheet_options_accepts_recent_today() {
+        let actual = parse_timesheet_options("today", "recent").unwrap();
+
+        assert_eq!(
+            actual,
+            TimesheetOptions {
+                range: TimesheetRange::Today,
+                format: TimesheetFormat::Recent,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_timesheet_options_rejects_unknown_range() {
+        let err = parse_timesheet_options("month", "full").unwrap_err();
+
+        assert_eq!(err, "Unknown timesheet range.");
+    }
+
+    #[test]
+    fn parse_timesheet_options_rejects_unknown_format() {
+        let err = parse_timesheet_options("all", "compact").unwrap_err();
+
+        assert_eq!(err, "Unknown timesheet format.");
+    }
+
+    #[test]
+    fn parse_timesheet_options_rejects_recent_for_non_today_ranges() {
+        let err = parse_timesheet_options("week", "recent").unwrap_err();
+
+        assert_eq!(
+            err,
+            "Yesterday + today export only supports the two-day overview."
+        );
+    }
+
+    #[test]
+    fn next_recent_usage_timestamp_is_strictly_greater_than_existing_max() {
+        let mut settings = UiSettings::default();
+        settings.project_recent_usage = HashMap::from([
+            ("Alpha".to_string(), 100),
+            ("Beta".to_string(), 250),
+        ]);
+
+        let actual = next_recent_usage_timestamp(&settings);
+
+        assert!(actual > 250);
+    }
+
+    #[test]
+    fn next_recent_usage_timestamp_advances_when_clock_value_is_not_newer() {
+        let mut settings = UiSettings::default();
+        settings.project_recent_usage = HashMap::from([("Alpha".to_string(), u64::MAX - 1)]);
+
+        let actual = next_recent_usage_timestamp(&settings);
+
+        assert_eq!(actual, u64::MAX);
+    }
 }

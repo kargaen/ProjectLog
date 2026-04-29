@@ -223,4 +223,48 @@ mod tests {
         assert!(!settings.timesheet_rounding_enabled);
         let _ = fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn load_clamps_invalid_opacity_and_normalizes_invalid_modes() {
+        let dir = temp_dir();
+        fs::write(
+            dir.join("settings.json"),
+            r#"{
+  "always_on_top": false,
+  "open_on_start": true,
+  "quickpanel_opacity": 0.1,
+  "project_sort_mode": "sideways",
+  "quickpanel_mode": "floating",
+  "timesheet_rounding_enabled": true
+}
+"#,
+        )
+        .unwrap();
+
+        let settings = load(&dir);
+        assert_eq!(settings.quickpanel_opacity, 0.35);
+        assert_eq!(settings.project_sort_mode, "manual");
+        assert_eq!(settings.quickpanel_mode, "normal");
+        assert!(settings.timesheet_rounding_enabled);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn save_persists_normalized_values() {
+        let dir = temp_dir();
+        let settings = UiSettings {
+            quickpanel_opacity: 5.0,
+            project_sort_mode: "zigzag".to_string(),
+            quickpanel_mode: "mini".to_string(),
+            ..UiSettings::default()
+        };
+
+        save(&dir, &settings);
+        let actual = load(&dir);
+
+        assert_eq!(actual.quickpanel_opacity, 1.0);
+        assert_eq!(actual.project_sort_mode, "manual");
+        assert_eq!(actual.quickpanel_mode, "normal");
+        let _ = fs::remove_dir_all(dir);
+    }
 }

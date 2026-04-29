@@ -29,6 +29,7 @@ pub struct TimesheetOptions {
 }
 
 impl TimesheetOptions {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub const fn full(range: TimesheetRange) -> Self {
         Self {
             range,
@@ -36,6 +37,7 @@ impl TimesheetOptions {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub const fn recent() -> Self {
         Self {
             range: TimesheetRange::Today,
@@ -712,6 +714,59 @@ mod tests {
 
         assert!(path.ends_with("timesheet-yesterday-today.xlsx"));
         assert!(path.exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn preview_recent_includes_comment_rows_and_totals() {
+        let dir = temp_dir("timesheet-preview-recent");
+        let today = Local::now().naive_local().date();
+        let log = format!(
+            "{today} 10:00:00\tBeta\tBuild\n{today} 13:00:00\t\n"
+        );
+        fs::write(dir.join("log.dat"), log).unwrap();
+
+        let preview = preview(&dir, TimesheetOptions::recent()).unwrap();
+
+        assert_eq!(preview.title, "Yesterday + today");
+        assert_eq!(preview.sheets.len(), 1);
+        assert_eq!(preview.sheets[0].rows[0].label, "Beta");
+        assert_eq!(preview.sheets[0].rows[0].total, 3.0);
+        assert_eq!(preview.sheets[0].rows[1].label, "  - Build");
+        assert!(
+            preview.sheets[0]
+                .rows
+                .iter()
+                .find(|row| row.label == "  - Build")
+                .unwrap()
+                .is_comment
+        );
+        assert_eq!(preview.sheets[0].rows.last().unwrap().label, "Total");
+        assert!(preview.sheets[0].rows.last().unwrap().is_total);
+        assert_eq!(preview.sheets[0].rows.last().unwrap().total, 3.0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn preview_full_groups_entries_by_week() {
+        let dir = temp_dir("timesheet-preview-full");
+        fs::write(
+            dir.join("log.dat"),
+            "2026-04-20 09:00:00\tAlpha\tKickoff\n2026-04-20 11:00:00\tBeta\n2026-04-28 09:00:00\tBeta\tBuild\n2026-04-28 12:00:00\t\n",
+        )
+        .unwrap();
+
+        let preview = preview(&dir, TimesheetOptions::full(TimesheetRange::All)).unwrap();
+
+        assert_eq!(preview.title, "Full timesheet");
+        assert_eq!(preview.sheets.len(), 2);
+        assert_eq!(preview.sheets[0].name, "2026-17");
+        assert_eq!(preview.sheets[1].name, "2026-18");
+        assert_eq!(preview.sheets[0].rows[0].label, "Alpha");
+        assert_eq!(preview.sheets[0].rows[1].label, "  - Kickoff");
+        assert_eq!(preview.sheets[0].rows.last().unwrap().label, "Total");
+        assert_eq!(preview.sheets[1].rows[0].label, "Beta");
+        assert_eq!(preview.sheets[1].rows.last().unwrap().total, 3.0);
         let _ = fs::remove_dir_all(dir);
     }
 }

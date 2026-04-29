@@ -25,13 +25,9 @@
     {
       "label": "ProjectLog: Save + New Version",
       "type": "shell",
-      "command": "powershell",
+      "command": "node",
       "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}/scripts/push-release.ps1"
+        "${workspaceFolder}/scripts/release.mjs"
       ],
       "options": {
         "cwd": "${workspaceFolder}"

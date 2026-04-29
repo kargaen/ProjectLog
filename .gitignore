@@ -3,3 +3,5 @@ dist/
 src-tauri/target/
 *.xlsx
 .npm-cache/
+playwright-report/
+test-results/

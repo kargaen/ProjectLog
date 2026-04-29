@@ -104,4 +104,42 @@ mod tests {
         assert_eq!(content, "2026-04-25 08:00:00\tProject\tMeeting\n");
         let _ = fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn log_new_entry_writes_project_and_comment() {
+        let dir = temp_dir("log-entry-comment");
+        let path = dir.join("log.dat");
+
+        log_new_entry(&dir, "Alpha", "Planning");
+
+        let content = fs::read_to_string(path).unwrap();
+        assert!(content.contains("\tAlpha\tPlanning\n"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn log_new_entry_without_comment_writes_two_columns() {
+        let dir = temp_dir("log-entry-no-comment");
+        let path = dir.join("log.dat");
+
+        log_new_entry(&dir, "Alpha", "");
+
+        let content = fs::read_to_string(path).unwrap();
+        assert!(content.contains("\tAlpha\n"));
+        assert!(!content.contains("\tAlpha\t\n"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn reset_log_clears_existing_content() {
+        let dir = temp_dir("reset-log");
+        let path = dir.join("log.dat");
+        fs::write(&path, "2026-04-25 08:00:00\tProject\tComment\n").unwrap();
+
+        reset_log(&dir);
+
+        let content = fs::read_to_string(path).unwrap();
+        assert!(content.is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
 }

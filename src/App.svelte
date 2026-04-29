@@ -67,6 +67,11 @@
     sheets: TimesheetPreviewSheet[];
   };
 
+  type TimesheetPreviewRequest = {
+    range: TimesheetRange;
+    format: TimesheetFormat;
+  };
+
   let appState = $state<ProjectState>({
     app_version: "",
     active_project: "",
@@ -118,8 +123,14 @@
   let settingsSaveTimer: ReturnType<typeof setTimeout> | undefined = $state();
   let closeInputOnSubmit = $state(true);
   let ignoredStateChangedEvents = $state(0);
+  const currentWindow = getCurrentWindow();
+  const currentWindowLabel = currentWindow.label;
   const windowParams = new URLSearchParams(window.location.search);
-  const isTimesheetPreviewWindow = windowParams.get("window") === "timesheet-preview";
+  const isDedicatedTimesheetPreviewWindow =
+    windowParams.get("window") === "timesheet-preview" || currentWindowLabel === "timesheet-preview";
+  let isTimesheetPreviewWindow = $state(
+    isDedicatedTimesheetPreviewWindow
+  );
   let timesheetPreview = $state<TimesheetPreview | null>(null);
   let timesheetPreviewRange = $state<TimesheetRange>("all");
   let timesheetPreviewFormat = $state<TimesheetFormat>("full");
@@ -230,6 +241,7 @@
   function applyAppState(nextState: ProjectState, options?: { preserveMode?: boolean }) {
     const preserveMode = options?.preserveMode ?? false;
     const currentQuickPanelMode = quickPanelMode;
+    const currentSortMode = sortMode;
 
     appState.app_version = nextState.app_version;
     appState.active_project = nextState.active_project;
@@ -245,7 +257,9 @@
     appState.settings.quickpanel_width = nextState.settings.quickpanel_width;
     appState.settings.quickpanel_height = nextState.settings.quickpanel_height;
     appState.settings.quickpanel_opacity = nextState.settings.quickpanel_opacity;
-    appState.settings.project_sort_mode = nextState.settings.project_sort_mode;
+    appState.settings.project_sort_mode = preserveMode
+      ? currentSortMode
+      : nextState.settings.project_sort_mode;
     appState.settings.quickpanel_mode = nextState.settings.quickpanel_mode;
     appState.settings.project_manual_order = nextState.settings.project_manual_order;
     appState.settings.project_recent_usage = nextState.settings.project_recent_usage;
@@ -255,7 +269,7 @@
     alwaysOnTop = nextState.settings.always_on_top;
     openOnStart = nextState.settings.open_on_start;
     quickPanelOpacity = nextState.settings.quickpanel_opacity;
-    sortMode = nextState.settings.project_sort_mode ?? "manual";
+    sortMode = preserveMode ? currentSortMode : (nextState.settings.project_sort_mode ?? "manual");
     quickPanelMode = preserveMode ? currentQuickPanelMode : (nextState.settings.quickpanel_mode ?? "normal");
     manualOrder = nextState.settings.project_manual_order ?? [];
     recentProjects = nextState.settings.project_recent_usage ?? {};
@@ -370,11 +384,15 @@
       return;
     }
     try {
+      isTimesheetPreviewWindow = true;
+      timesheetPreview = null;
       const preview = await invoke<TimesheetPreview>("preview_timesheet", { range, format });
       timesheetPreview = preview;
       timesheetPreviewRange = range;
       timesheetPreviewFormat = format;
-      timesheetPreviewSheetIndex = 0;
+      timesheetPreviewSheetIndex = format === "full"
+        ? Math.max(preview.sheets.length - 1, 0)
+        : 0;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log.warn("openTimesheetPreview failed", { range, format, message });
@@ -572,14 +590,23 @@
 
   onMount(async () => {
     log.info("mounted");
+    const unlistenTimesheetPreview = listen<{ range: TimesheetRange; format: TimesheetFormat }>("show-timesheet-preview", (event) => {
+      if (!isDedicatedTimesheetPreviewWindow) return;
+      isTimesheetPreviewWindow = true;
+      openTimesheetPreview(event.payload.range, event.payload.format);
+    });
+
     await loadState();
-    if (isTimesheetPreviewWindow) {
-      const range = (windowParams.get("range") as TimesheetRange | null) ?? "all";
-      const format = (windowParams.get("format") as TimesheetFormat | null) ?? "full";
-      await openTimesheetPreview(range, format);
-      return;
+    if (isDedicatedTimesheetPreviewWindow) {
+      const request = await invoke<TimesheetPreviewRequest | null>("get_timesheet_preview_request");
+      if (request) {
+        await openTimesheetPreview(request.range, request.format);
+      }
+      return () => {
+        unlistenTimesheetPreview.then((fn) => fn());
+      };
     }
-    const win = getCurrentWindow();
+    const win = currentWindow;
     await restoreQuickPanelBounds();
     await applyQuickpanelModeLayout(quickPanelMode);
     await win.setAlwaysOnTop(alwaysOnTop);
@@ -614,9 +641,6 @@
       setTimeout(() => inputEl?.focus(), 50);
     });
     const unlistenAbout = listen("show-about", openAbout);
-    const unlistenTimesheetPreview = listen<{ range: TimesheetRange; format: TimesheetFormat }>("show-timesheet-preview", (event) => {
-      openTimesheetPreview(event.payload.range, event.payload.format);
-    });
     const unlistenState = listen("state-changed", () => {
       if (ignoredStateChangedEvents > 0) {
         ignoredStateChangedEvents -= 1;
@@ -658,6 +682,16 @@
   let displayedTimesheetSheet = $derived(
     timesheetPreview ? timesheetPreview.sheets[timesheetPreviewSheetIndex] : null
   );
+
+  let timesheetPreviewYears = $derived.by(() => {
+    if (!timesheetPreview) return [];
+    const years = new Set(
+      timesheetPreview.sheets
+        .map((sheet) => sheet.name.split("-")[0])
+        .filter((value) => /^\d{4}$/.test(value))
+    );
+    return [...years].sort();
+  });
 
   let displayedTimesheetRows = $derived.by(() => {
     if (!displayedTimesheetSheet) return [];
@@ -716,6 +750,11 @@
               Weekly tabs from the full ProjectLog history
             {/if}
           </p>
+          {#if timesheetPreviewYears.length > 1}
+            <p class="timesheet-year-hint">
+              Includes weeks from {timesheetPreviewYears.join(", ")}
+            </p>
+          {/if}
         </div>
       </header>
 
@@ -1429,11 +1468,6 @@
     width: min(360px, 100%);
   }
 
-  .timesheet-dialog {
-    width: min(980px, 100%);
-    max-height: min(720px, calc(100vh - 32px));
-  }
-
   .timesheet-window {
     min-height: 100vh;
     display: flex;
@@ -1462,6 +1496,11 @@
     margin: 4px 0 0;
     color: #5f675d;
     font-size: 12px;
+  }
+
+  .timesheet-year-hint {
+    color: #267a62;
+    font-weight: 600;
   }
 
   .timesheet-preview-panel {
@@ -1544,13 +1583,6 @@
   .total-row td {
     font-weight: 650;
     background: #f8faf6;
-  }
-
-  .timesheet-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
   }
 
   .timesheet-window-footer {
