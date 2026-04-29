@@ -23,7 +23,7 @@
   type SortMode = "manual" | "alphabetical" | "recent";
   type QuickPanelMode = "normal" | "compact";
   type TimesheetRange = "today" | "week" | "all";
-  type TimesheetFormat = "full" | "lite";
+  type TimesheetFormat = "full" | "recent";
 
   type ProjectState = {
     app_version: string;
@@ -44,7 +44,27 @@
       quickpanel_mode: QuickPanelMode;
       project_manual_order: string[];
       project_recent_usage: Record<string, number>;
+      timesheet_rounding_enabled: boolean;
     };
+  };
+
+  type TimesheetPreviewRow = {
+    label: string;
+    values: number[];
+    total: number;
+    is_comment: boolean;
+    is_total: boolean;
+  };
+
+  type TimesheetPreviewSheet = {
+    name: string;
+    columns: string[];
+    rows: TimesheetPreviewRow[];
+  };
+
+  type TimesheetPreview = {
+    title: string;
+    sheets: TimesheetPreviewSheet[];
   };
 
   let appState = $state<ProjectState>({
@@ -66,6 +86,7 @@
       quickpanel_mode: "normal",
       project_manual_order: [],
       project_recent_usage: {},
+      timesheet_rounding_enabled: false,
     },
   });
   let quickName = $state("");
@@ -96,18 +117,17 @@
   let inputEl: HTMLInputElement | undefined = $state();
   let settingsSaveTimer: ReturnType<typeof setTimeout> | undefined = $state();
   let closeInputOnSubmit = $state(true);
+  let ignoredStateChangedEvents = $state(0);
+  const windowParams = new URLSearchParams(window.location.search);
+  const isTimesheetPreviewWindow = windowParams.get("window") === "timesheet-preview";
+  let timesheetPreview = $state<TimesheetPreview | null>(null);
+  let timesheetPreviewRange = $state<TimesheetRange>("all");
+  let timesheetPreviewFormat = $state<TimesheetFormat>("full");
+  let timesheetPreviewSheetIndex = $state(0);
+  let timesheetRoundingEnabled = $state(false);
 
   function clamp(value: number, min: number, max: number) {
     return Math.min(Math.max(value, min), max);
-  }
-
-  function rememberProjectUse(project: string) {
-    if (!project) return;
-    recentProjects = {
-      ...recentProjects,
-      [project]: Date.now(),
-    };
-    queueSettingsSave();
   }
 
   function syncManualOrder(projects: string[]) {
@@ -129,12 +149,29 @@
     return event.key === "Enter" && !event.shiftKey;
   }
 
-  async function startWindowDrag() {
-    await getCurrentWindow().startDragging().catch(() => {});
+  function roundHalfPreservingSum(values: number[]) {
+    const step = 0.5;
+    const floors = values.map((value) => Math.floor(value / step) * step);
+    const roundedTotal = Math.round((values.reduce((sum, value) => sum + value, 0) / step)) * step;
+    const currentTotal = floors.reduce((sum, value) => sum + value, 0);
+    let increments = Math.round((roundedTotal - currentTotal) / step);
+    const ranked = values
+      .map((value, index) => ({ index, remainder: value - floors[index] }))
+      .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+    const result = [...floors];
+    for (let i = 0; i < ranked.length && increments > 0; i += 1) {
+      result[ranked[i].index] += step;
+      increments -= 1;
+    }
+    return result;
   }
 
-  async function startResizeDrag() {
-    await getCurrentWindow().startResizeDragging("SouthEast").catch(() => {});
+  function formatHours(value: number) {
+    return timesheetRoundingEnabled ? value.toFixed(1) : value.toFixed(2);
+  }
+
+  async function startWindowDrag() {
+    await getCurrentWindow().startDragging().catch(() => {});
   }
 
   async function restoreQuickPanelBounds() {
@@ -190,18 +227,53 @@
     await win.setPosition(new LogicalPosition(x, y)).catch(() => {});
   }
 
-  async function loadState() {
+  function applyAppState(nextState: ProjectState, options?: { preserveMode?: boolean }) {
+    const preserveMode = options?.preserveMode ?? false;
+    const currentQuickPanelMode = quickPanelMode;
+
+    appState.app_version = nextState.app_version;
+    appState.active_project = nextState.active_project;
+    appState.active_comment = nextState.active_comment;
+    appState.projects = nextState.projects;
+    appState.adhoc_projects = nextState.adhoc_projects;
+    appState.update_available = nextState.update_available;
+
+    appState.settings.always_on_top = nextState.settings.always_on_top;
+    appState.settings.open_on_start = nextState.settings.open_on_start;
+    appState.settings.quickpanel_x = nextState.settings.quickpanel_x;
+    appState.settings.quickpanel_y = nextState.settings.quickpanel_y;
+    appState.settings.quickpanel_width = nextState.settings.quickpanel_width;
+    appState.settings.quickpanel_height = nextState.settings.quickpanel_height;
+    appState.settings.quickpanel_opacity = nextState.settings.quickpanel_opacity;
+    appState.settings.project_sort_mode = nextState.settings.project_sort_mode;
+    appState.settings.quickpanel_mode = nextState.settings.quickpanel_mode;
+    appState.settings.project_manual_order = nextState.settings.project_manual_order;
+    appState.settings.project_recent_usage = nextState.settings.project_recent_usage;
+    appState.settings.timesheet_rounding_enabled = nextState.settings.timesheet_rounding_enabled;
+
+    commentText = nextState.active_comment;
+    alwaysOnTop = nextState.settings.always_on_top;
+    openOnStart = nextState.settings.open_on_start;
+    quickPanelOpacity = nextState.settings.quickpanel_opacity;
+    sortMode = nextState.settings.project_sort_mode ?? "manual";
+    quickPanelMode = preserveMode ? currentQuickPanelMode : (nextState.settings.quickpanel_mode ?? "normal");
+    manualOrder = nextState.settings.project_manual_order ?? [];
+    recentProjects = nextState.settings.project_recent_usage ?? {};
+    timesheetRoundingEnabled = nextState.settings.timesheet_rounding_enabled ?? false;
+    syncManualOrder([...nextState.projects, ...nextState.adhoc_projects]);
+  }
+
+  async function loadState(options?: { preserveMode?: boolean }) {
     log.debug("loadState");
-    appState = await invoke<ProjectState>("get_state");
-    commentText = appState.active_comment;
-    alwaysOnTop = appState.settings.always_on_top;
-    openOnStart = appState.settings.open_on_start;
-    quickPanelOpacity = appState.settings.quickpanel_opacity;
-    sortMode = appState.settings.project_sort_mode ?? "manual";
-    quickPanelMode = appState.settings.quickpanel_mode ?? "normal";
-    manualOrder = appState.settings.project_manual_order ?? [];
-    recentProjects = appState.settings.project_recent_usage ?? {};
-    syncManualOrder([...appState.projects, ...appState.adhoc_projects]);
+    const nextState = await invoke<ProjectState>("get_state");
+    applyAppState(nextState, options);
+  }
+
+  async function refreshFromCommand<T>(command: Promise<T>, options?: { preserveMode?: boolean }) {
+    ignoredStateChangedEvents += 1;
+    const result = await command;
+    await loadState(options);
+    return result;
   }
 
   async function persistUiSettings() {
@@ -213,6 +285,7 @@
       quickpanelMode,
       projectManualOrder: manualOrder,
       projectRecentUsage: recentProjects,
+      timesheetRoundingEnabled,
     });
   }
 
@@ -232,54 +305,47 @@
 
   async function selectProject(project: string) {
     log.info("selectProject", { project });
-    await invoke("select_project", { project });
-    rememberProjectUse(project);
-    await loadState();
+    await refreshFromCommand(invoke("select_project", { project }), { preserveMode: true });
   }
 
   async function addProject() {
     const value = newProjectName.trim();
     if (!value) return;
     log.info("addProject", { length: value.length });
-    await invoke("add_project", { value });
+    await refreshFromCommand(invoke("add_project", { value }), { preserveMode: true });
     newProjectName = "";
-    await loadState();
   }
 
   async function trackQuick(addToo: boolean) {
     const value = quickName.trim();
     if (!value) return;
     log.info("trackQuick", { addToo, length: value.length });
-    if (addToo) await invoke("add_project", { value });
-    await invoke("quick_project", { value });
-    rememberProjectUse(value);
+    if (addToo) {
+      await refreshFromCommand(invoke("add_project", { value }), { preserveMode: true });
+    }
+    await refreshFromCommand(invoke("quick_project", { value }), { preserveMode: true });
     quickName = "";
-    await loadState();
   }
 
   async function saveComment() {
     log.info("saveComment", { length: commentText.trim().length });
-    await invoke("set_comment", { value: commentText.trim() });
-    await loadState();
+    await refreshFromCommand(invoke("set_comment", { value: commentText.trim() }), { preserveMode: true });
   }
 
   async function clearComment() {
     commentText = "";
     log.info("clearComment");
-    await invoke("set_comment", { value: "" });
-    await loadState();
+    await refreshFromCommand(invoke("set_comment", { value: "" }), { preserveMode: true });
   }
 
   async function removeProject(project: string) {
     log.warn("removeProject", { project });
-    await invoke("remove_project", { project });
-    await loadState();
+    await refreshFromCommand(invoke("remove_project", { project }), { preserveMode: true });
   }
 
   async function saveAdhocProject(project: string) {
     log.info("saveAdhocProject", { project });
-    await invoke("add_project", { value: project });
-    await loadState();
+    await refreshFromCommand(invoke("add_project", { value: project }), { preserveMode: true });
   }
 
   async function generateTimesheet() {
@@ -288,23 +354,54 @@
 
   async function generateTimesheetExport(range: TimesheetRange, format: TimesheetFormat = "full") {
     log.info("generateTimesheetExport", { range, format });
-    await invoke("generate_timesheet_export", { range, format });
-    await loadState();
+    try {
+      await invoke("generate_timesheet_export", { range, format });
+      await loadState({ preserveMode: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.warn("generateTimesheetExport failed", { range, format, message });
+      alert(message);
+    }
+  }
+
+  async function openTimesheetPreview(range: TimesheetRange, format: TimesheetFormat = "full") {
+    if (!isTimesheetPreviewWindow) {
+      await invoke("open_timesheet_preview_window", { range, format });
+      return;
+    }
+    try {
+      const preview = await invoke<TimesheetPreview>("preview_timesheet", { range, format });
+      timesheetPreview = preview;
+      timesheetPreviewRange = range;
+      timesheetPreviewFormat = format;
+      timesheetPreviewSheetIndex = 0;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.warn("openTimesheetPreview failed", { range, format, message });
+      alert(message);
+    }
+  }
+
+  async function closeTimesheetPreviewWindow() {
+    await getCurrentWindow().close().catch(() => {});
+  }
+
+  async function toggleTimesheetRounding() {
+    timesheetRoundingEnabled = !timesheetRoundingEnabled;
+    await persistUiSettings();
   }
 
   async function resetTimesheet() {
     if (confirm("Reset the timesheet?")) {
       log.warn("resetTimesheet confirmed");
-      await invoke("reset_timesheet");
-      await loadState();
+      await refreshFromCommand(invoke("reset_timesheet"), { preserveMode: true });
     }
   }
 
   async function resetProjects() {
     if (confirm("Reset all saved projects?")) {
       log.warn("resetProjects confirmed");
-      await invoke("reset_projects");
-      await loadState();
+      await refreshFromCommand(invoke("reset_projects"), { preserveMode: true });
     }
   }
 
@@ -476,6 +573,12 @@
   onMount(async () => {
     log.info("mounted");
     await loadState();
+    if (isTimesheetPreviewWindow) {
+      const range = (windowParams.get("range") as TimesheetRange | null) ?? "all";
+      const format = (windowParams.get("format") as TimesheetFormat | null) ?? "full";
+      await openTimesheetPreview(range, format);
+      return;
+    }
     const win = getCurrentWindow();
     await restoreQuickPanelBounds();
     await applyQuickpanelModeLayout(quickPanelMode);
@@ -511,7 +614,16 @@
       setTimeout(() => inputEl?.focus(), 50);
     });
     const unlistenAbout = listen("show-about", openAbout);
-    const unlistenState = listen("state-changed", loadState);
+    const unlistenTimesheetPreview = listen<{ range: TimesheetRange; format: TimesheetFormat }>("show-timesheet-preview", (event) => {
+      openTimesheetPreview(event.payload.range, event.payload.format);
+    });
+    const unlistenState = listen("state-changed", () => {
+      if (ignoredStateChangedEvents > 0) {
+        ignoredStateChangedEvents -= 1;
+        return;
+      }
+      loadState();
+    });
     const unlistenUpdatePrompt = listen("show-update-prompt", openUpdatePrompt);
     const unlistenSubmitted = listen("input-submitted", () => {
       dialogOpen = false;
@@ -525,6 +637,7 @@
       clearInterval(interval);
       unlistenInput.then((fn) => fn());
       unlistenAbout.then((fn) => fn());
+      unlistenTimesheetPreview.then((fn) => fn());
       unlistenState.then((fn) => fn());
       unlistenUpdatePrompt.then((fn) => fn());
       unlistenSubmitted.then((fn) => fn());
@@ -541,25 +654,139 @@
     }
     return manualOrder.filter((project) => combined.includes(project));
   });
+
+  let displayedTimesheetSheet = $derived(
+    timesheetPreview ? timesheetPreview.sheets[timesheetPreviewSheetIndex] : null
+  );
+
+  let displayedTimesheetRows = $derived.by(() => {
+    if (!displayedTimesheetSheet) return [];
+    const rows = displayedTimesheetSheet.rows.map((row) => {
+      if (!timesheetRoundingEnabled || row.is_total) {
+        return row;
+      }
+      const roundedValues = roundHalfPreservingSum(row.values);
+      return {
+        ...row,
+        values: roundedValues,
+        total: roundedValues.reduce((sum, value) => sum + value, 0),
+      };
+    });
+    if (!timesheetRoundingEnabled) {
+      return rows;
+    }
+    const totalIndex = rows.findIndex((row) => row.is_total);
+    if (totalIndex === -1) {
+      return rows;
+    }
+    const valueCount = rows[totalIndex].values.length;
+    const columnTotals = new Array<number>(valueCount).fill(0);
+    for (const row of rows) {
+      if (row.is_total) continue;
+      row.values.forEach((value, index) => {
+        columnTotals[index] += value;
+      });
+    }
+    rows[totalIndex] = {
+      ...rows[totalIndex],
+      values: columnTotals,
+      total: columnTotals.reduce((sum, value) => sum + value, 0),
+    };
+    return rows;
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} onmouseup={finishDrag} />
 
-<main class:compact-shell={quickPanelMode === "compact"} style:opacity={quickPanelOpacity}>
-  {#if updateStatus !== "idle"}
-    <section class="update">
-      <div>
-        {#if updateStatus === "available"}Update available: v{updateVersion}{/if}
-        {#if updateStatus === "downloading"}Updating... {Math.round(updateProgress)}%{/if}
-        {#if updateStatus === "ready"}Update installed. Restarting...{/if}
-      </div>
-      {#if updateStatus === "available"}
-        <button class="primary small" onclick={openUpdatePrompt}>Details</button>
-      {/if}
-    </section>
-  {/if}
+<main
+  class:compact-shell={!isTimesheetPreviewWindow && quickPanelMode === "compact"}
+  class:timesheet-window={isTimesheetPreviewWindow}
+  style:opacity={isTimesheetPreviewWindow ? 1 : quickPanelOpacity}
+>
+  {#if isTimesheetPreviewWindow}
+    {#if timesheetPreview && displayedTimesheetSheet}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <header class="timesheet-window-header" onmousedown={startWindowDrag}>
+        <div>
+          <h1>{timesheetPreview.title}</h1>
+          <p>
+            {#if timesheetPreviewFormat === "recent"}
+              Yesterday + today overview
+            {:else}
+              Weekly tabs from the full ProjectLog history
+            {/if}
+          </p>
+        </div>
+      </header>
 
-  {#if quickPanelMode === "normal"}
+      <section class="timesheet-preview-panel">
+        {#if timesheetPreview.sheets.length > 1}
+          <div class="sheet-tabs">
+            {#each timesheetPreview.sheets as sheet, index}
+              <button
+                class:sort-active={timesheetPreviewSheetIndex === index}
+                onclick={() => (timesheetPreviewSheetIndex = index)}
+              >{sheet.name}</button>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="timesheet-table-wrap">
+          <table class="timesheet-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                {#each displayedTimesheetSheet.columns as column}
+                  <th>{column}</th>
+                {/each}
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each displayedTimesheetRows as row}
+                <tr class:comment-row={row.is_comment} class:total-row={row.is_total}>
+                  <td>{row.label}</td>
+                  {#each row.values as value}
+                    <td>{formatHours(value)}</td>
+                  {/each}
+                  <td>{formatHours(row.total)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="timesheet-window-footer">
+        <div class="toggle-row">
+          <span>Round to 0.5h</span>
+          <button aria-label="Round to 0.5h" class:toggle-on={timesheetRoundingEnabled} class="toggle" onclick={toggleTimesheetRounding}><span></span></button>
+        </div>
+        <div class="dialog-buttons about-buttons">
+          <button onclick={closeTimesheetPreviewWindow}>Close</button>
+          <button class="primary" onclick={() => generateTimesheetExport(timesheetPreviewRange, timesheetPreviewFormat)}>Export to Excel</button>
+        </div>
+      </section>
+    {:else}
+      <section class="timesheet-preview-panel timesheet-preview-loading">
+        <h1>Loading timesheet…</h1>
+        <p>ProjectLog is preparing the preview window.</p>
+      </section>
+    {/if}
+  {:else}
+    {#if updateStatus !== "idle"}
+      <section class="update">
+        <div>
+          {#if updateStatus === "available"}Update available: v{updateVersion}{/if}
+          {#if updateStatus === "downloading"}Updating... {Math.round(updateProgress)}%{/if}
+          {#if updateStatus === "ready"}Update installed. Restarting...{/if}
+        </div>
+        {#if updateStatus === "available"}
+          <button class="primary small" onclick={openUpdatePrompt}>Details</button>
+        {/if}
+      </section>
+    {/if}
+
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <header class="quickpanel-header">
       <div class="quickpanel-drag" onmousedown={startWindowDrag}>
@@ -567,7 +794,7 @@
         <div>
           <h1>ProjectLog QuickPanel</h1>
           <p>{appState.active_project || "No active project"}</p>
-          {#if appState.active_comment}
+          {#if quickPanelMode === "normal" && appState.active_comment}
             <p class="active-comment">{appState.active_comment}</p>
           {/if}
         </div>
@@ -580,25 +807,6 @@
         >Hide</button>
       </div>
     </header>
-  {:else}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <header class="quickpanel-header compact-header">
-      <div class="quickpanel-drag" onmousedown={startWindowDrag}>
-        <img class="logo" src={appIcon} alt="ProjectLog" />
-        <div>
-          <h1>ProjectLog Compact</h1>
-          <p>{appState.active_project || "Pick a project"}</p>
-        </div>
-      </div>
-      <div class="header-actions">
-        <button
-          class="ghost"
-          onmousedown={(event) => event.stopPropagation()}
-          onclick={() => getCurrentWindow().hide()}
-        >Hide</button>
-      </div>
-    </header>
-  {/if}
 
   <section class="panel project-panel">
     {#if quickPanelMode === "normal"}
@@ -681,10 +889,8 @@
     </section>
 
     <section class="actions">
-      <button onclick={() => generateTimesheetExport("today")}>Today</button>
-      <button onclick={() => generateTimesheetExport("week")}>Weekly</button>
-      <button onclick={() => generateTimesheetExport("all")}>All data</button>
-      <button onclick={() => generateTimesheetExport("today", "lite")}>Generate lite</button>
+      <button onclick={() => openTimesheetPreview("all")}>Full timesheet</button>
+      <button onclick={() => openTimesheetPreview("today", "recent")}>Yesterday + today</button>
       <button onclick={() => invoke("open_log_file")}>Open log file</button>
       <button onclick={resetTimesheet}>Reset timesheet</button>
       <button onclick={resetProjects}>Reset projects</button>
@@ -803,16 +1009,8 @@
       </div>
     </div>
   {/if}
+  {/if}
 
-  <button
-    class="resize-handle"
-    aria-label="Resize QuickPanel"
-    title="Resize"
-    onmousedown={(event) => {
-      event.preventDefault();
-      startResizeDrag();
-    }}
-  ></button>
 </main>
 
 <style>
@@ -862,10 +1060,6 @@
   .header-actions {
     display: flex;
     gap: 4px;
-  }
-
-  .compact-header {
-    padding-block: 6px;
   }
 
   .quickpanel-drag {
@@ -1176,6 +1370,10 @@
     background: #d8dccc;
   }
 
+  .toggle:hover:not(:disabled) {
+    background: #d8dccc;
+  }
+
   .toggle span {
     flex: none;
     width: 12px;
@@ -1187,6 +1385,10 @@
   }
 
   .toggle.toggle-on {
+    background: #267a62;
+  }
+
+  .toggle.toggle-on:hover:not(:disabled) {
     background: #267a62;
   }
 
@@ -1227,6 +1429,138 @@
     width: min(360px, 100%);
   }
 
+  .timesheet-dialog {
+    width: min(980px, 100%);
+    max-height: min(720px, calc(100vh - 32px));
+  }
+
+  .timesheet-window {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: linear-gradient(180deg, #f5f7f1 0%, #eef1e8 100%);
+    box-sizing: border-box;
+  }
+
+  .timesheet-window-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 4px 2px 0;
+    cursor: default;
+  }
+
+  .timesheet-window-header h1 {
+    margin: 0;
+    color: #21352c;
+    font-size: 20px;
+  }
+
+  .timesheet-window-header p {
+    margin: 4px 0 0;
+    color: #5f675d;
+    font-size: 12px;
+  }
+
+  .timesheet-preview-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #cfd5c6;
+    border-radius: 8px;
+    box-shadow: 0 14px 34px rgba(45, 55, 39, 0.1);
+  }
+
+  .timesheet-preview-loading {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .timesheet-preview-loading h1 {
+    margin: 0;
+    color: #21352c;
+    font-size: 18px;
+  }
+
+  .timesheet-preview-loading p {
+    margin: 4px 0 0;
+    color: #5f675d;
+    font-size: 12px;
+  }
+
+  .sheet-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .timesheet-table-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid #d8dccc;
+    border-radius: 5px;
+  }
+
+  .timesheet-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    background: #fff;
+  }
+
+  .timesheet-table th,
+  .timesheet-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #ecefe6;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .timesheet-table th:first-child,
+  .timesheet-table td:first-child {
+    text-align: left;
+    min-width: 220px;
+  }
+
+  .timesheet-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f4f5f1;
+    z-index: 1;
+  }
+
+  .comment-row td:first-child {
+    color: #697064;
+  }
+
+  .total-row td {
+    font-weight: 650;
+    background: #f8faf6;
+  }
+
+  .timesheet-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .timesheet-window-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 2px;
+  }
+
   .update {
     padding: 6px 8px;
     background: #e9f6f1;
@@ -1265,26 +1599,4 @@
     gap: 6px;
   }
 
-  .resize-handle {
-    position: absolute;
-    right: 6px;
-    bottom: 6px;
-    width: 16px;
-    height: 16px;
-    padding: 0;
-    border: 0;
-    background:
-      linear-gradient(135deg, transparent 0 45%, rgba(105, 112, 100, 0.8) 45% 55%, transparent 55% 100%),
-      linear-gradient(135deg, transparent 0 65%, rgba(105, 112, 100, 0.8) 65% 75%, transparent 75% 100%),
-      linear-gradient(135deg, transparent 0 85%, rgba(105, 112, 100, 0.8) 85% 95%, transparent 95% 100%);
-    cursor: nwse-resize;
-    opacity: 0.85;
-  }
-
-  .resize-handle:hover {
-    background:
-      linear-gradient(135deg, transparent 0 45%, rgba(38, 122, 98, 0.9) 45% 55%, transparent 55% 100%),
-      linear-gradient(135deg, transparent 0 65%, rgba(38, 122, 98, 0.9) 65% 75%, transparent 75% 100%),
-      linear-gradient(135deg, transparent 0 85%, rgba(38, 122, 98, 0.9) 85% 95%, transparent 95% 100%);
-  }
 </style>

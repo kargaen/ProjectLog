@@ -18,6 +18,10 @@ fn default_quickpanel_mode() -> String {
     "normal".to_string()
 }
 
+fn default_timesheet_rounding_enabled() -> bool {
+    false
+}
+
 fn normalize_opacity(value: f64) -> f64 {
     value.clamp(0.35, 1.0)
 }
@@ -54,6 +58,8 @@ pub struct UiSettings {
     pub project_manual_order: Vec<String>,
     #[serde(default)]
     pub project_recent_usage: HashMap<String, u64>,
+    #[serde(default = "default_timesheet_rounding_enabled")]
+    pub timesheet_rounding_enabled: bool,
 }
 
 impl Default for UiSettings {
@@ -70,6 +76,7 @@ impl Default for UiSettings {
             quickpanel_mode: default_quickpanel_mode(),
             project_manual_order: Vec::new(),
             project_recent_usage: HashMap::new(),
+            timesheet_rounding_enabled: default_timesheet_rounding_enabled(),
         }
     }
 }
@@ -170,6 +177,7 @@ mod tests {
             quickpanel_mode: "compact".to_string(),
             project_manual_order: vec!["Alpha".to_string(), "Beta".to_string()],
             project_recent_usage: HashMap::from([("Alpha".to_string(), 123)]),
+            timesheet_rounding_enabled: true,
         };
 
         save(&dir, &expected);
@@ -186,6 +194,10 @@ mod tests {
         assert_eq!(actual.quickpanel_mode, expected.quickpanel_mode);
         assert_eq!(actual.project_manual_order, expected.project_manual_order);
         assert_eq!(actual.project_recent_usage, expected.project_recent_usage);
+        assert_eq!(
+            actual.timesheet_rounding_enabled,
+            expected.timesheet_rounding_enabled
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -208,6 +220,7 @@ mod tests {
         let settings = load(&dir);
         assert_eq!(settings.project_sort_mode, "manual");
         assert_eq!(settings.quickpanel_mode, "normal");
+        assert!(!settings.timesheet_rounding_enabled);
         let _ = fs::remove_dir_all(dir);
     }
 }

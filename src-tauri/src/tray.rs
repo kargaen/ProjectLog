@@ -1,4 +1,5 @@
 use std::sync::atomic::Ordering;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use image::GenericImageView;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -212,29 +213,15 @@ fn build_menu(app: &AppHandle) -> Result<Menu<Wry>, Box<dyn std::error::Error>> 
     let timesheet_sub = Submenu::with_id(app, "timesheet_menu", "Generate timesheet", true)?;
     timesheet_sub.append(&MenuItem::with_id(
         app,
-        "generate_sheet::today",
-        "Today",
-        true,
-        None::<&str>,
-    )?)?;
-    timesheet_sub.append(&MenuItem::with_id(
-        app,
-        "generate_sheet::week",
-        "Weekly",
-        true,
-        None::<&str>,
-    )?)?;
-    timesheet_sub.append(&MenuItem::with_id(
-        app,
         "generate_sheet::all",
-        "All data",
+        "Full timesheet",
         true,
         None::<&str>,
     )?)?;
     timesheet_sub.append(&MenuItem::with_id(
         app,
-        "generate_sheet::lite",
-        "Lite (today + yesterday)",
+        "generate_sheet::recent",
+        "Yesterday + today",
         true,
         None::<&str>,
     )?)?;
@@ -410,6 +397,24 @@ fn show_quickpanel(app: &AppHandle) {
     }
 }
 
+fn remember_project_use(app: &AppHandle, project: &str) {
+    if project.is_empty() {
+        return;
+    }
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+
+    let state = app.state::<AppState>();
+    let mut settings = state.settings.lock().unwrap();
+    settings
+        .project_recent_usage
+        .insert(project.to_string(), timestamp);
+    crate::settings::save(&state.data_dir, &settings);
+}
+
 fn handle_update_available(app: &AppHandle) {
     show_quickpanel(app);
     let _ = app.emit("show-update-prompt", ());
@@ -431,6 +436,7 @@ fn handle_select(app: &AppHandle, name: &str) {
         // Select new project
         logger::log_new_entry(&state.data_dir, name, "");
         *active = name.to_string();
+        remember_project_use(app, name);
     }
     *comment = String::new();
 
@@ -475,35 +481,13 @@ fn show_input(app: &AppHandle, mode: &str, title: &str) {
 }
 
 fn handle_generate(app: &AppHandle, mode: &str) {
-    log!("tray generate timesheet mode={}", mode);
-    let state = app.state::<AppState>();
-
-    // Log current state for an accurate timesheet
-    let active = state.active_project.lock().unwrap().clone();
-    let comment = state.active_comment.lock().unwrap().clone();
-    logger::log_new_entry(&state.data_dir, &active, &comment);
-
-    let options = match mode {
-        "today" => timesheet::TimesheetOptions::full(timesheet::TimesheetRange::Today),
-        "week" => timesheet::TimesheetOptions::full(timesheet::TimesheetRange::Week),
-        "all" => timesheet::TimesheetOptions::full(timesheet::TimesheetRange::All),
-        "lite" => timesheet::TimesheetOptions::lite(),
+    log!("tray open timesheet preview mode={}", mode);
+    let (range, format) = match mode {
+        "all" => ("all", "full"),
+        "recent" => ("today", "recent"),
         _ => return,
     };
-
-    match timesheet::generate(&state.data_dir, options) {
-        Ok(path) => {
-            use tauri_plugin_opener::OpenerExt;
-            let _ = app.opener().open_path(path.to_str().unwrap(), None::<&str>);
-        }
-        Err(msg) => {
-            use tauri_plugin_dialog::DialogExt;
-            app.dialog()
-                .message(&msg)
-                .title("Timesheet")
-                .blocking_show();
-        }
-    }
+    let _ = crate::open_timesheet_preview_window(range.to_string(), format.to_string(), app.clone());
 }
 
 fn handle_reset_sheet(app: &AppHandle) {

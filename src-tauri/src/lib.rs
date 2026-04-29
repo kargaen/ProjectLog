@@ -9,11 +9,12 @@ use tauri_plugin_autostart::ManagerExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use settings::UiSettings;
-use tauri::{Emitter, Manager, State};
-use timesheet::{TimesheetFormat, TimesheetOptions, TimesheetRange};
+use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use timesheet::{TimesheetFormat, TimesheetOptions, TimesheetPreview, TimesheetRange};
 
 pub struct AppState {
     pub active_project: Mutex<String>,
@@ -58,12 +59,12 @@ fn parse_timesheet_options(range: &str, format: &str) -> Result<TimesheetOptions
     };
     let format = match format {
         "full" => TimesheetFormat::Full,
-        "lite" => TimesheetFormat::Lite,
+        "recent" => TimesheetFormat::Recent,
         _ => return Err("Unknown timesheet format.".to_string()),
     };
 
-    if format == TimesheetFormat::Lite && range != TimesheetRange::Today {
-        return Err("Lite timesheet only supports today and yesterday.".to_string());
+    if format == TimesheetFormat::Recent && range != TimesheetRange::Today {
+        return Err("Yesterday + today export only supports the two-day overview.".to_string());
     }
 
     Ok(TimesheetOptions { range, format })
@@ -98,6 +99,23 @@ fn migrate_legacy_files(data_dir: &PathBuf) {
     migrate_legacy_file(data_dir, "log.dat");
 }
 
+fn remember_project_use(state: &AppState, project: &str) {
+    if project.is_empty() {
+        return;
+    }
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+
+    let mut settings = state.settings.lock().unwrap();
+    settings
+        .project_recent_usage
+        .insert(project.to_string(), timestamp);
+    settings::save(&state.data_dir, &settings);
+}
+
 fn add_project_value(state: &AppState, value: &str) {
     let value = clean_input(value);
     if value.is_empty() {
@@ -121,6 +139,7 @@ fn quick_project_value(state: &AppState, value: &str) {
     logger::log_new_entry(&state.data_dir, &value, "");
     *state.active_project.lock().unwrap() = value.clone();
     *state.active_comment.lock().unwrap() = String::new();
+    remember_project_use(state, &value);
 
     let in_permanent = state.projects.lock().unwrap().contains(&value);
     if !in_permanent {
@@ -203,6 +222,7 @@ fn select_project(project: String, state: State<AppState>, app: tauri::AppHandle
     } else {
         logger::log_new_entry(&state.data_dir, &project, "");
         *active = project;
+        remember_project_use(&state, &*active);
     }
     *comment = String::new();
 
@@ -251,6 +271,77 @@ fn remove_project(project: String, state: State<AppState>, app: tauri::AppHandle
 #[tauri::command]
 fn generate_timesheet(state: State<AppState>, app: tauri::AppHandle) -> Result<(), String> {
     generate_timesheet_export("all".to_string(), "full".to_string(), state, app)
+}
+
+#[tauri::command]
+fn preview_timesheet(
+    range: String,
+    format: String,
+    state: State<AppState>,
+) -> Result<TimesheetPreview, String> {
+    log!("preview_timesheet range={} format={}", range, format);
+    let active = state.active_project.lock().unwrap().clone();
+    let comment = state.active_comment.lock().unwrap().clone();
+    logger::log_new_entry(&state.data_dir, &active, &comment);
+    let options = parse_timesheet_options(&range, &format)?;
+    timesheet::preview(&state.data_dir, options)
+}
+
+#[tauri::command]
+pub(crate) fn open_timesheet_preview_window(
+    range: String,
+    format: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let options = parse_timesheet_options(&range, &format)?;
+    let (label, title) = match options.format {
+        TimesheetFormat::Recent => (
+            "timesheet-preview-recent",
+            "ProjectLog Timesheet: Yesterday + Today",
+        ),
+        TimesheetFormat::Full => (
+            "timesheet-preview-full",
+            "ProjectLog Timesheet: Full",
+        ),
+    };
+    let preview = timesheet::preview(&app.state::<AppState>().data_dir, options)?;
+    let max_columns = preview
+        .sheets
+        .iter()
+        .map(|sheet| sheet.columns.len())
+        .max()
+        .unwrap_or(2);
+    let max_rows = preview
+        .sheets
+        .iter()
+        .map(|sheet| sheet.rows.len())
+        .max()
+        .unwrap_or(8);
+    let width = (300.0 + ((max_columns + 1) as f64 * 92.0)).clamp(760.0, 1360.0);
+    let height = (220.0 + (max_rows as f64 * 26.0)).clamp(520.0, 880.0);
+
+    let query = format!("index.html?window=timesheet-preview&range={range}&format={format}");
+
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.set_title(title);
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.eval(&format!(
+            "window.location.href = '/{}';",
+            query.replace('\\', "\\\\").replace('\'', "\\'")
+        ));
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(&app, label, WebviewUrl::App(query.into()))
+        .title(title)
+        .inner_size(width, height)
+        .min_inner_size(640.0, 420.0)
+        .resizable(true)
+        .center()
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -396,6 +487,7 @@ fn save_ui_settings(
     quickpanel_mode: String,
     project_manual_order: Vec<String>,
     project_recent_usage: std::collections::HashMap<String, u64>,
+    timesheet_rounding_enabled: bool,
     state: State<AppState>,
     app: tauri::AppHandle,
 ) {
@@ -424,6 +516,7 @@ fn save_ui_settings(
     let changed = settings.always_on_top != always_on_top
         || settings.open_on_start != open_on_start
         || (settings.quickpanel_opacity - normalized_opacity).abs() > f64::EPSILON
+        || settings.timesheet_rounding_enabled != timesheet_rounding_enabled
         || tray_needs_rebuild;
 
     if !changed {
@@ -438,6 +531,7 @@ fn save_ui_settings(
     settings.quickpanel_mode = normalized_quickpanel_mode;
     settings.project_manual_order = project_manual_order;
     settings.project_recent_usage = project_recent_usage;
+    settings.timesheet_rounding_enabled = timesheet_rounding_enabled;
     settings::save(&state.data_dir, &settings);
     if open_on_start {
         let _ = app.autolaunch().enable();
@@ -533,6 +627,8 @@ pub fn run() {
             set_comment,
             remove_project,
             generate_timesheet,
+            preview_timesheet,
+            open_timesheet_preview_window,
             generate_timesheet_export,
             reset_timesheet,
             reset_projects,
@@ -550,8 +646,10 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .build(tauri::generate_context!())
