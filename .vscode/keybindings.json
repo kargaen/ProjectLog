@@ -8,5 +8,10 @@
     "key": "shift+f6",
     "command": "workbench.action.tasks.runTask",
     "args": "ProjectLog: Save + New Version"
+  },
+  {
+    "key": "f7",
+    "command": "workbench.action.tasks.runTask",
+    "args": "ProjectLog: Run Tests"
   }
 ]
