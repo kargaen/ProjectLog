@@ -11,7 +11,15 @@
   } from "@tauri-apps/api/window";
   import { check, type Update } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
+  import TimesheetPreviewWindow from "./lib/components/TimesheetPreviewWindow.svelte";
   import { createLogger } from "./lib/logger";
+  import type {
+    ProjectState,
+    QuickPanelMode,
+    SortMode,
+    TimesheetFormat,
+    TimesheetRange,
+  } from "./lib/types";
   import appIcon from "../icon.svg";
 
   const log = createLogger("quickpanel");
@@ -19,58 +27,6 @@
   const MIN_NORMAL_HEIGHT = 430;
   const MIN_COMPACT_HEIGHT = 220;
   const MIN_OPACITY = 0.35;
-
-  type SortMode = "manual" | "alphabetical" | "recent";
-  type QuickPanelMode = "normal" | "compact";
-  type TimesheetRange = "today" | "week" | "all";
-  type TimesheetFormat = "full" | "recent";
-
-  type ProjectState = {
-    app_version: string;
-    active_project: string;
-    active_comment: string;
-    projects: string[];
-    adhoc_projects: string[];
-    update_available: boolean;
-    settings: {
-      always_on_top: boolean;
-      open_on_start: boolean;
-      quickpanel_x: number | null;
-      quickpanel_y: number | null;
-      quickpanel_width: number | null;
-      quickpanel_height: number | null;
-      quickpanel_opacity: number;
-      project_sort_mode: SortMode;
-      quickpanel_mode: QuickPanelMode;
-      project_manual_order: string[];
-      project_recent_usage: Record<string, number>;
-      timesheet_rounding_enabled: boolean;
-    };
-  };
-
-  type TimesheetPreviewRow = {
-    label: string;
-    values: number[];
-    total: number;
-    is_comment: boolean;
-    is_total: boolean;
-  };
-
-  type TimesheetPreviewSheet = {
-    name: string;
-    columns: string[];
-    rows: TimesheetPreviewRow[];
-  };
-
-  type TimesheetPreview = {
-    title: string;
-    sheets: TimesheetPreviewSheet[];
-  };
-
-  type TimesheetPreviewRequest = {
-    range: TimesheetRange;
-    format: TimesheetFormat;
-  };
 
   let appState = $state<ProjectState>({
     app_version: "",
@@ -123,19 +79,13 @@
   let settingsSaveTimer: ReturnType<typeof setTimeout> | undefined = $state();
   let closeInputOnSubmit = $state(true);
   let ignoredStateChangedEvents = $state(0);
+  let timesheetRoundingEnabled = $state(false);
+
   const currentWindow = getCurrentWindow();
   const currentWindowLabel = currentWindow.label;
   const windowParams = new URLSearchParams(window.location.search);
   const isDedicatedTimesheetPreviewWindow =
     windowParams.get("window") === "timesheet-preview" || currentWindowLabel === "timesheet-preview";
-  let isTimesheetPreviewWindow = $state(
-    isDedicatedTimesheetPreviewWindow
-  );
-  let timesheetPreview = $state<TimesheetPreview | null>(null);
-  let timesheetPreviewRange = $state<TimesheetRange>("all");
-  let timesheetPreviewFormat = $state<TimesheetFormat>("full");
-  let timesheetPreviewSheetIndex = $state(0);
-  let timesheetRoundingEnabled = $state(false);
 
   function clamp(value: number, min: number, max: number) {
     return Math.min(Math.max(value, min), max);
@@ -160,33 +110,11 @@
     return event.key === "Enter" && !event.shiftKey;
   }
 
-  function roundHalfPreservingSum(values: number[]) {
-    const step = 0.5;
-    const floors = values.map((value) => Math.floor(value / step) * step);
-    const roundedTotal = Math.round((values.reduce((sum, value) => sum + value, 0) / step)) * step;
-    const currentTotal = floors.reduce((sum, value) => sum + value, 0);
-    let increments = Math.round((roundedTotal - currentTotal) / step);
-    const ranked = values
-      .map((value, index) => ({ index, remainder: value - floors[index] }))
-      .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
-    const result = [...floors];
-    for (let i = 0; i < ranked.length && increments > 0; i += 1) {
-      result[ranked[i].index] += step;
-      increments -= 1;
-    }
-    return result;
-  }
-
-  function formatHours(value: number) {
-    return timesheetRoundingEnabled ? value.toFixed(1) : value.toFixed(2);
-  }
-
   async function startWindowDrag() {
-    await getCurrentWindow().startDragging().catch(() => {});
+    await currentWindow.startDragging().catch(() => {});
   }
 
   async function restoreQuickPanelBounds() {
-    const win = getCurrentWindow();
     const savedWidth = appState.settings.quickpanel_width;
     const savedHeight = appState.settings.quickpanel_height;
     const savedX = appState.settings.quickpanel_x;
@@ -201,9 +129,9 @@
     const fallbackMonitor = (await primaryMonitor().catch(() => null)) ?? monitors[0] ?? null;
 
     if (!fallbackMonitor) {
-      await win.setSize(new LogicalSize(savedWidth, savedHeight)).catch(() => {});
+      await currentWindow.setSize(new LogicalSize(savedWidth, savedHeight)).catch(() => {});
       if (savedX !== null && savedY !== null) {
-        await win.setPosition(new LogicalPosition(savedX, savedY)).catch(() => {});
+        await currentWindow.setPosition(new LogicalPosition(savedX, savedY)).catch(() => {});
       }
       return;
     }
@@ -234,8 +162,8 @@
       area.position.y + Math.max(area.size.height - height, 0)
     );
 
-    await win.setSize(new LogicalSize(width, height)).catch(() => {});
-    await win.setPosition(new LogicalPosition(x, y)).catch(() => {});
+    await currentWindow.setSize(new LogicalSize(width, height)).catch(() => {});
+    await currentWindow.setPosition(new LogicalPosition(x, y)).catch(() => {});
   }
 
   function applyAppState(nextState: ProjectState, options?: { preserveMode?: boolean }) {
@@ -304,14 +232,15 @@
   }
 
   async function applyQuickpanelModeLayout(mode: QuickPanelMode) {
-    const win = getCurrentWindow();
     const minHeight = mode === "compact" ? MIN_COMPACT_HEIGHT : MIN_NORMAL_HEIGHT;
-    await win.setMinSize(new LogicalSize(MIN_QUICKPANEL_WIDTH, minHeight)).catch(() => {});
+    await currentWindow.setMinSize(new LogicalSize(MIN_QUICKPANEL_WIDTH, minHeight)).catch(() => {});
 
     try {
-      const size = await win.outerSize();
+      const size = await currentWindow.outerSize();
       if (size.height < minHeight) {
-        await win.setSize(new LogicalSize(Math.max(size.width, MIN_QUICKPANEL_WIDTH), minHeight)).catch(() => {});
+        await currentWindow.setSize(
+          new LogicalSize(Math.max(size.width, MIN_QUICKPANEL_WIDTH), minHeight)
+        ).catch(() => {});
       }
     } catch {
     }
@@ -323,21 +252,21 @@
   }
 
   async function addProject() {
-    const value = newProjectName.trim();
-    if (!value) return;
-    log.info("addProject", { length: value.length });
-    await refreshFromCommand(invoke("add_project", { value }), { preserveMode: true });
+    const nextValue = newProjectName.trim();
+    if (!nextValue) return;
+    log.info("addProject", { length: nextValue.length });
+    await refreshFromCommand(invoke("add_project", { value: nextValue }), { preserveMode: true });
     newProjectName = "";
   }
 
   async function trackQuick(addToo: boolean) {
-    const value = quickName.trim();
-    if (!value) return;
-    log.info("trackQuick", { addToo, length: value.length });
+    const nextValue = quickName.trim();
+    if (!nextValue) return;
+    log.info("trackQuick", { addToo, length: nextValue.length });
     if (addToo) {
-      await refreshFromCommand(invoke("add_project", { value }), { preserveMode: true });
+      await refreshFromCommand(invoke("add_project", { value: nextValue }), { preserveMode: true });
     }
-    await refreshFromCommand(invoke("quick_project", { value }), { preserveMode: true });
+    await refreshFromCommand(invoke("quick_project", { value: nextValue }), { preserveMode: true });
     quickName = "";
   }
 
@@ -362,10 +291,6 @@
     await refreshFromCommand(invoke("add_project", { value: project }), { preserveMode: true });
   }
 
-  async function generateTimesheet() {
-    await generateTimesheetExport("all", "full");
-  }
-
   async function generateTimesheetExport(range: TimesheetRange, format: TimesheetFormat = "full") {
     log.info("generateTimesheetExport", { range, format });
     try {
@@ -379,34 +304,7 @@
   }
 
   async function openTimesheetPreview(range: TimesheetRange, format: TimesheetFormat = "full") {
-    if (!isTimesheetPreviewWindow) {
-      await invoke("open_timesheet_preview_window", { range, format });
-      return;
-    }
-    try {
-      isTimesheetPreviewWindow = true;
-      timesheetPreview = null;
-      const preview = await invoke<TimesheetPreview>("preview_timesheet", { range, format });
-      timesheetPreview = preview;
-      timesheetPreviewRange = range;
-      timesheetPreviewFormat = format;
-      timesheetPreviewSheetIndex = format === "full"
-        ? Math.max(preview.sheets.length - 1, 0)
-        : 0;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log.warn("openTimesheetPreview failed", { range, format, message });
-      alert(message);
-    }
-  }
-
-  async function closeTimesheetPreviewWindow() {
-    await getCurrentWindow().close().catch(() => {});
-  }
-
-  async function toggleTimesheetRounding() {
-    timesheetRoundingEnabled = !timesheetRoundingEnabled;
-    await persistUiSettings();
+    await invoke("open_timesheet_preview_window", { range, format });
   }
 
   async function resetTimesheet() {
@@ -425,7 +323,7 @@
 
   async function toggleAlwaysOnTop() {
     alwaysOnTop = !alwaysOnTop;
-    await getCurrentWindow().setAlwaysOnTop(alwaysOnTop);
+    await currentWindow.setAlwaysOnTop(alwaysOnTop);
     await persistUiSettings();
     log.info("toggleAlwaysOnTop", { alwaysOnTop });
   }
@@ -529,13 +427,13 @@
     aboutOpen = false;
   }
 
-  function onKeydown(e: KeyboardEvent) {
-    if (dialogOpen && e.key === "Enter") submitDialog();
-    if (dialogOpen && e.key === "Escape") cancelDialog();
+  function onKeydown(event: KeyboardEvent) {
+    if (dialogOpen && event.key === "Enter") submitDialog();
+    if (dialogOpen && event.key === "Escape") cancelDialog();
   }
 
-  function setSortMode(next: SortMode) {
-    sortMode = next;
+  function setSortMode(nextMode: SortMode) {
+    sortMode = nextMode;
     queueSettingsSave();
   }
 
@@ -557,7 +455,7 @@
   }
 
   function finishDrag() {
-    if (effectiveSortMode !== "manual" || !draggedProject) return;
+    if (!draggedProject) return;
     const droppedProject = draggedProject;
     const project = dropTargetProject;
     if (!project || droppedProject === project) {
@@ -588,83 +486,87 @@
     dropPosition = "before";
   }
 
-  onMount(async () => {
-    log.info("mounted");
-    const unlistenTimesheetPreview = listen<{ range: TimesheetRange; format: TimesheetFormat }>("show-timesheet-preview", (event) => {
-      if (!isDedicatedTimesheetPreviewWindow) return;
-      isTimesheetPreviewWindow = true;
-      openTimesheetPreview(event.payload.range, event.payload.format);
-    });
-
-    await loadState();
+  onMount(() => {
     if (isDedicatedTimesheetPreviewWindow) {
-      const request = await invoke<TimesheetPreviewRequest | null>("get_timesheet_preview_request");
-      if (request) {
-        await openTimesheetPreview(request.range, request.format);
-      }
-      return () => {
-        unlistenTimesheetPreview.then((fn) => fn());
-      };
+      return;
     }
-    const win = currentWindow;
-    await restoreQuickPanelBounds();
-    await applyQuickpanelModeLayout(quickPanelMode);
-    await win.setAlwaysOnTop(alwaysOnTop);
-    await checkForUpdate();
-    if (openOnStart) await win.show();
 
-    let lastBounds = "";
-    const interval = setInterval(async () => {
-      try {
-        const pos = await win.outerPosition();
-        const size = await win.outerSize();
-        const next = `${pos.x}:${pos.y}:${size.width}:${size.height}`;
-        if (next !== lastBounds) {
-          lastBounds = next;
-          await invoke("save_quickpanel_bounds", {
-            x: pos.x,
-            y: pos.y,
-            width: size.width,
-            height: size.height,
-          });
+    let disposed = false;
+    let cleanup = () => {};
+
+    void (async () => {
+      log.info("mounted");
+      await loadState();
+      await restoreQuickPanelBounds();
+      await applyQuickpanelModeLayout(quickPanelMode);
+      await currentWindow.setAlwaysOnTop(alwaysOnTop);
+      await checkForUpdate();
+      if (openOnStart) await currentWindow.show();
+
+      let lastBounds = "";
+      const interval = setInterval(async () => {
+        try {
+          const pos = await currentWindow.outerPosition();
+          const size = await currentWindow.outerSize();
+          const next = `${pos.x}:${pos.y}:${size.width}:${size.height}`;
+          if (next !== lastBounds) {
+            lastBounds = next;
+            await invoke("save_quickpanel_bounds", {
+              x: pos.x,
+              y: pos.y,
+              width: size.width,
+              height: size.height,
+            });
+          }
+        } catch {
         }
-      } catch {
-      }
-    }, 800);
+      }, 800);
 
-    const unlistenInput = listen<{ mode: string; title: string; value: string; closeOnSubmit?: boolean }>("show-input", (event) => {
-      mode = event.payload.mode;
-      title = event.payload.title;
-      value = event.payload.value;
-      closeInputOnSubmit = event.payload.closeOnSubmit ?? true;
-      dialogOpen = true;
-      setTimeout(() => inputEl?.focus(), 50);
-    });
-    const unlistenAbout = listen("show-about", openAbout);
-    const unlistenState = listen("state-changed", () => {
-      if (ignoredStateChangedEvents > 0) {
-        ignoredStateChangedEvents -= 1;
-        return;
+      const unlistenInput = listen<{ mode: string; title: string; value: string; closeOnSubmit?: boolean }>(
+        "show-input",
+        (event) => {
+          mode = event.payload.mode;
+          title = event.payload.title;
+          value = event.payload.value;
+          closeInputOnSubmit = event.payload.closeOnSubmit ?? true;
+          dialogOpen = true;
+          setTimeout(() => inputEl?.focus(), 50);
+        }
+      );
+      const unlistenAbout = listen("show-about", openAbout);
+      const unlistenState = listen("state-changed", () => {
+        if (ignoredStateChangedEvents > 0) {
+          ignoredStateChangedEvents -= 1;
+          return;
+        }
+        loadState();
+      });
+      const unlistenUpdatePrompt = listen("show-update-prompt", openUpdatePrompt);
+      const unlistenSubmitted = listen("input-submitted", () => {
+        dialogOpen = false;
+        value = "";
+        if (closeInputOnSubmit) {
+          currentWindow.hide().catch(() => {});
+        }
+      });
+
+      cleanup = () => {
+        clearInterval(interval);
+        unlistenInput.then((fn) => fn());
+        unlistenAbout.then((fn) => fn());
+        unlistenState.then((fn) => fn());
+        unlistenUpdatePrompt.then((fn) => fn());
+        unlistenSubmitted.then((fn) => fn());
+      };
+
+      if (disposed) {
+        cleanup();
       }
-      loadState();
-    });
-    const unlistenUpdatePrompt = listen("show-update-prompt", openUpdatePrompt);
-    const unlistenSubmitted = listen("input-submitted", () => {
-      dialogOpen = false;
-      value = "";
-      if (closeInputOnSubmit) {
-        getCurrentWindow().hide().catch(() => {});
-      }
-    });
+    })();
 
     return () => {
-      clearInterval(interval);
-      unlistenInput.then((fn) => fn());
-      unlistenAbout.then((fn) => fn());
-      unlistenTimesheetPreview.then((fn) => fn());
-      unlistenState.then((fn) => fn());
-      unlistenUpdatePrompt.then((fn) => fn());
-      unlistenSubmitted.then((fn) => fn());
+      disposed = true;
+      cleanup();
     };
   });
 
@@ -674,145 +576,20 @@
       return [...combined].sort((a, b) => a.localeCompare(b));
     }
     if (effectiveSortMode === "recent") {
-      return [...combined].sort((a, b) => (recentProjects[b] ?? 0) - (recentProjects[a] ?? 0) || a.localeCompare(b));
+      return [...combined].sort(
+        (a, b) => (recentProjects[b] ?? 0) - (recentProjects[a] ?? 0) || a.localeCompare(b)
+      );
     }
     return manualOrder.filter((project) => combined.includes(project));
-  });
-
-  let displayedTimesheetSheet = $derived(
-    timesheetPreview ? timesheetPreview.sheets[timesheetPreviewSheetIndex] : null
-  );
-
-  let timesheetPreviewYears = $derived.by(() => {
-    if (!timesheetPreview) return [];
-    const years = new Set(
-      timesheetPreview.sheets
-        .map((sheet) => sheet.name.split("-")[0])
-        .filter((value) => /^\d{4}$/.test(value))
-    );
-    return [...years].sort();
-  });
-
-  let displayedTimesheetRows = $derived.by(() => {
-    if (!displayedTimesheetSheet) return [];
-    const rows = displayedTimesheetSheet.rows.map((row) => {
-      if (!timesheetRoundingEnabled || row.is_total) {
-        return row;
-      }
-      const roundedValues = roundHalfPreservingSum(row.values);
-      return {
-        ...row,
-        values: roundedValues,
-        total: roundedValues.reduce((sum, value) => sum + value, 0),
-      };
-    });
-    if (!timesheetRoundingEnabled) {
-      return rows;
-    }
-    const totalIndex = rows.findIndex((row) => row.is_total);
-    if (totalIndex === -1) {
-      return rows;
-    }
-    const valueCount = rows[totalIndex].values.length;
-    const columnTotals = new Array<number>(valueCount).fill(0);
-    for (const row of rows) {
-      if (row.is_total) continue;
-      row.values.forEach((value, index) => {
-        columnTotals[index] += value;
-      });
-    }
-    rows[totalIndex] = {
-      ...rows[totalIndex],
-      values: columnTotals,
-      total: columnTotals.reduce((sum, value) => sum + value, 0),
-    };
-    return rows;
   });
 </script>
 
 <svelte:window onkeydown={onKeydown} onmouseup={finishDrag} />
 
-<main
-  class:compact-shell={!isTimesheetPreviewWindow && quickPanelMode === "compact"}
-  class:timesheet-window={isTimesheetPreviewWindow}
-  style:opacity={isTimesheetPreviewWindow ? 1 : quickPanelOpacity}
->
-  {#if isTimesheetPreviewWindow}
-    {#if timesheetPreview && displayedTimesheetSheet}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <header class="timesheet-window-header" onmousedown={startWindowDrag}>
-        <div>
-          <h1>{timesheetPreview.title}</h1>
-          <p>
-            {#if timesheetPreviewFormat === "recent"}
-              Yesterday + today overview
-            {:else}
-              Weekly tabs from the full ProjectLog history
-            {/if}
-          </p>
-          {#if timesheetPreviewYears.length > 1}
-            <p class="timesheet-year-hint">
-              Includes weeks from {timesheetPreviewYears.join(", ")}
-            </p>
-          {/if}
-        </div>
-      </header>
-
-      <section class="timesheet-preview-panel">
-        {#if timesheetPreview.sheets.length > 1}
-          <div class="sheet-tabs">
-            {#each timesheetPreview.sheets as sheet, index}
-              <button
-                class:sort-active={timesheetPreviewSheetIndex === index}
-                onclick={() => (timesheetPreviewSheetIndex = index)}
-              >{sheet.name}</button>
-            {/each}
-          </div>
-        {/if}
-
-        <div class="timesheet-table-wrap">
-          <table class="timesheet-table">
-            <thead>
-              <tr>
-                <th>Project</th>
-                {#each displayedTimesheetSheet.columns as column}
-                  <th>{column}</th>
-                {/each}
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each displayedTimesheetRows as row}
-                <tr class:comment-row={row.is_comment} class:total-row={row.is_total}>
-                  <td>{row.label}</td>
-                  {#each row.values as value}
-                    <td>{formatHours(value)}</td>
-                  {/each}
-                  <td>{formatHours(row.total)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="timesheet-window-footer">
-        <div class="toggle-row">
-          <span>Round to 0.5h</span>
-          <button aria-label="Round to 0.5h" class:toggle-on={timesheetRoundingEnabled} class="toggle" onclick={toggleTimesheetRounding}><span></span></button>
-        </div>
-        <div class="dialog-buttons about-buttons">
-          <button onclick={closeTimesheetPreviewWindow}>Close</button>
-          <button class="primary" onclick={() => generateTimesheetExport(timesheetPreviewRange, timesheetPreviewFormat)}>Export to Excel</button>
-        </div>
-      </section>
-    {:else}
-      <section class="timesheet-preview-panel timesheet-preview-loading">
-        <h1>Loading timesheet…</h1>
-        <p>ProjectLog is preparing the preview window.</p>
-      </section>
-    {/if}
-  {:else}
+{#if isDedicatedTimesheetPreviewWindow}
+  <TimesheetPreviewWindow />
+{:else}
+  <main class:compact-shell={quickPanelMode === "compact"} style:opacity={quickPanelOpacity}>
     {#if updateStatus !== "idle"}
       <section class="update">
         <div>
@@ -842,215 +619,228 @@
         <button
           class="ghost"
           onmousedown={(event) => event.stopPropagation()}
-          onclick={() => getCurrentWindow().hide()}
+          onclick={() => currentWindow.hide()}
         >Hide</button>
       </div>
     </header>
 
-  <section class="panel project-panel">
-    {#if quickPanelMode === "normal"}
-      <div class="sort-row">
-        <button class:sort-active={sortMode === "manual"} onclick={() => setSortMode("manual")}>Manual</button>
-        <button class:sort-active={sortMode === "alphabetical"} onclick={() => setSortMode("alphabetical")}>A-Z</button>
-        <button class:sort-active={sortMode === "recent"} onclick={() => setSortMode("recent")}>Recent</button>
-      </div>
-    {/if}
-    <div class="project-list">
-      {#if allProjects.length === 0}
-        <div class="empty">No projects yet.</div>
+    <section class="panel project-panel">
+      {#if quickPanelMode === "normal"}
+        <div class="sort-row">
+          <button class:sort-active={sortMode === "manual"} onclick={() => setSortMode("manual")}>Manual</button>
+          <button class:sort-active={sortMode === "alphabetical"} onclick={() => setSortMode("alphabetical")}>A-Z</button>
+          <button class:sort-active={sortMode === "recent"} onclick={() => setSortMode("recent")}>Recent</button>
+        </div>
       {/if}
-      {#each allProjects as project}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class:active={appState.active_project === project}
-          class:manual-sort={effectiveSortMode === "manual"}
-          class:dragging={draggedProject === project}
-          class:drop-target={dropTargetProject === project}
-          class:drop-after={dropTargetProject === project && dropPosition === "after"}
-          class="project-row"
-          onmousemove={(event) => handleDragOver(event, project)}
-        >
-          {#if effectiveSortMode === "manual"}
-            <button
-              class="drag-handle"
-              aria-label="Reorder project"
-              title="Drag to reorder"
-              onmousedown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                handleDragStart(project);
-              }}
-            >≡</button>
-          {/if}
-          <button class="project-button" onclick={() => selectProject(project)}>
-            <span>{project}</span>
-            {#if appState.active_project === project}<strong>Active</strong>{/if}
-          </button>
-          {#if appState.projects.includes(project)}
-            <button class="icon-button" title="Remove project" onclick={() => removeProject(project)}>x</button>
-          {:else}
-            <button class="icon-button icon-add" title="Save project" onclick={() => saveAdhocProject(project)}>+</button>
-          {/if}
-        </div>
-      {/each}
-    </div>
-  </section>
-
-  {#if quickPanelMode === "normal"}
-    <section class="panel compact">
-      <input
-        id="comment"
-        bind:value={commentText}
-        disabled={!appState.active_project}
-        placeholder="Comment"
-        onkeydown={(event) => isEnterSubmit(event) && saveComment()}
-      />
-      <button onclick={saveComment} disabled={!appState.active_project}>Save</button>
-      <button onclick={clearComment} disabled={!appState.active_project || !commentText}>Clear</button>
+      <div class="project-list">
+        {#if allProjects.length === 0}
+          <div class="empty">No projects yet.</div>
+        {/if}
+        {#each allProjects as project}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class:active={appState.active_project === project}
+            class:manual-sort={effectiveSortMode === "manual"}
+            class:dragging={draggedProject === project}
+            class:drop-target={dropTargetProject === project}
+            class:drop-after={dropTargetProject === project && dropPosition === "after"}
+            class="project-row"
+            onmousemove={(event) => handleDragOver(event, project)}
+          >
+            {#if effectiveSortMode === "manual"}
+              <button
+                class="drag-handle"
+                aria-label="Reorder project"
+                title="Drag to reorder"
+                onmousedown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleDragStart(project);
+                }}
+              >|||</button>
+            {/if}
+            <button class="project-button" onclick={() => selectProject(project)}>
+              <span>{project}</span>
+              {#if appState.active_project === project}<strong>Active</strong>{/if}
+            </button>
+            {#if appState.projects.includes(project)}
+              <button class="icon-button" title="Remove project" onclick={() => removeProject(project)}>x</button>
+            {:else}
+              <button class="icon-button icon-add" title="Save project" onclick={() => saveAdhocProject(project)}>+</button>
+            {/if}
+          </div>
+        {/each}
+      </div>
     </section>
 
-    <section class="panel compact">
-      <input
-        bind:value={newProjectName}
-        placeholder="Add project"
-        onkeydown={(event) => isEnterSubmit(event) && addProject()}
-      />
-      <button onclick={addProject}>Add</button>
-    </section>
-
-    <section class="panel compact">
-      <input
-        bind:value={quickName}
-        placeholder="Quick project"
-        onkeydown={(event) => isEnterSubmit(event) && trackQuick(false)}
-      />
-      <button onclick={() => trackQuick(false)}>Track</button>
-    </section>
-
-    <section class="actions">
-      <button onclick={() => openTimesheetPreview("all")}>Full timesheet</button>
-      <button onclick={() => openTimesheetPreview("today", "recent")}>Yesterday + today</button>
-      <button onclick={() => invoke("open_log_file")}>Open log file</button>
-      <button onclick={resetTimesheet}>Reset timesheet</button>
-      <button onclick={resetProjects}>Reset projects</button>
-    </section>
-
-  {/if}
-
-  <section class="panel footer" class:compact-footer={quickPanelMode === "compact"}>
     {#if quickPanelMode === "normal"}
-      <div class="toggle-row">
-        <span>Always on top</span>
-        <button aria-label="Always on top" class:toggle-on={alwaysOnTop} class="toggle" onclick={toggleAlwaysOnTop}><span></span></button>
-      </div>
-      <div class="toggle-row">
-        <span>Open QuickPanel on start</span>
-        <button aria-label="Open QuickPanel on start" class:toggle-on={openOnStart} class="toggle" onclick={toggleOpenOnStart}><span></span></button>
-      </div>
-      <div class="opacity-row">
-        <span>Opacity</span>
+      <section class="panel compact">
         <input
-          type="range"
-          min={Math.round(MIN_OPACITY * 100)}
-          max="100"
-          step="1"
-          value={Math.round(quickPanelOpacity * 100)}
-          oninput={(event) => {
-            const target = event.currentTarget as HTMLInputElement;
-            quickPanelOpacity = Number(target.value) / 100;
-            queueSettingsSave();
-          }}
+          id="comment"
+          bind:value={commentText}
+          disabled={!appState.active_project}
+          placeholder="Comment"
+          onkeydown={(event) => isEnterSubmit(event) && saveComment()}
         />
-        <strong>{Math.round(quickPanelOpacity * 100)}%</strong>
+        <button onclick={saveComment} disabled={!appState.active_project}>Save</button>
+        <button onclick={clearComment} disabled={!appState.active_project || !commentText}>Clear</button>
+      </section>
+
+      <section class="panel compact">
+        <input
+          bind:value={newProjectName}
+          placeholder="Add project"
+          onkeydown={(event) => isEnterSubmit(event) && addProject()}
+        />
+        <button onclick={addProject}>Add</button>
+      </section>
+
+      <section class="panel compact">
+        <input
+          bind:value={quickName}
+          placeholder="Quick project"
+          onkeydown={(event) => isEnterSubmit(event) && trackQuick(false)}
+        />
+        <button onclick={() => trackQuick(false)}>Track</button>
+      </section>
+
+      <section class="actions">
+        <button onclick={() => openTimesheetPreview("all")}>Full timesheet</button>
+        <button onclick={() => openTimesheetPreview("today", "recent")}>Yesterday + today</button>
+        <button onclick={() => invoke("open_log_file")}>Open log file</button>
+        <button onclick={resetTimesheet}>Reset timesheet</button>
+        <button onclick={resetProjects}>Reset projects</button>
+      </section>
+    {/if}
+
+    <section class="panel footer" class:compact-footer={quickPanelMode === "compact"}>
+      {#if quickPanelMode === "normal"}
+        <div class="toggle-row">
+          <span>Always on top</span>
+          <button
+            aria-label="Always on top"
+            class:toggle-on={alwaysOnTop}
+            class="toggle"
+            onclick={toggleAlwaysOnTop}
+          ><span></span></button>
+        </div>
+        <div class="toggle-row">
+          <span>Open QuickPanel on start</span>
+          <button
+            aria-label="Open QuickPanel on start"
+            class:toggle-on={openOnStart}
+            class="toggle"
+            onclick={toggleOpenOnStart}
+          ><span></span></button>
+        </div>
+        <div class="opacity-row">
+          <span>Opacity</span>
+          <input
+            type="range"
+            min={Math.round(MIN_OPACITY * 100)}
+            max="100"
+            step="1"
+            value={Math.round(quickPanelOpacity * 100)}
+            oninput={(event) => {
+              const target = event.currentTarget as HTMLInputElement;
+              quickPanelOpacity = Number(target.value) / 100;
+              queueSettingsSave();
+            }}
+          />
+          <strong>{Math.round(quickPanelOpacity * 100)}%</strong>
+        </div>
+        <div class="feedback">
+          <button onclick={openAbout}>About</button>
+        </div>
+      {/if}
+      <div class="toggle-row">
+        <span>Compact mode</span>
+        <button
+          aria-label="Compact mode"
+          class:toggle-on={quickPanelMode === "compact"}
+          class="toggle"
+          onclick={toggleQuickPanelMode}
+        ><span></span></button>
       </div>
-      <div class="feedback">
-        <button onclick={openAbout}>About</button>
+    </section>
+
+    {#if dialogOpen}
+      <div class="dialog-backdrop">
+        <div class="dialog">
+          <h2>{title || "Input"}</h2>
+          <input bind:this={inputEl} bind:value type="text" placeholder="Type here..." />
+          <div class="dialog-buttons">
+            <button onclick={cancelDialog}>Cancel</button>
+            <button class="primary" onclick={submitDialog}>OK</button>
+          </div>
+        </div>
       </div>
     {/if}
-    <div class="toggle-row">
-      <span>Compact mode</span>
-      <button aria-label="Compact mode" class:toggle-on={quickPanelMode === "compact"} class="toggle" onclick={toggleQuickPanelMode}><span></span></button>
-    </div>
-  </section>
 
-  {#if dialogOpen}
-    <div class="dialog-backdrop">
-      <div class="dialog">
-        <h2>{title || "Input"}</h2>
-        <input bind:this={inputEl} bind:value type="text" placeholder="Type here..." />
-        <div class="dialog-buttons">
-          <button onclick={cancelDialog}>Cancel</button>
-          <button class="primary" onclick={submitDialog}>OK</button>
+    {#if aboutOpen}
+      <div class="dialog-backdrop">
+        <div class="dialog about-dialog">
+          <h2>About ProjectLog</h2>
+          <p class="about-copy">ProjectLog helps you track project changes with as little friction as possible.</p>
+          <p class="about-meta">Version {appState.app_version}</p>
+          <p class="about-meta">Developed by Karsten Garborg.</p>
+          <p class="about-links">
+            <a href="https://github.com/kargaen/ProjectLog" onclick={(event) => {
+              event.preventDefault();
+              invoke("open_project_homepage");
+            }}>ProjectLog</a>
+            <span> | </span>
+            <a href="mailto:karga@karga.dk" onclick={(event) => {
+              event.preventDefault();
+              invoke("open_feedback");
+            }}>Send feedback by mail</a>
+            <span> | </span>
+            <a href="https://karga.dk" onclick={(event) => {
+              event.preventDefault();
+              invoke("open_portfolio");
+            }}>Portfolio</a>
+          </p>
+          <p class="about-links">
+            <a href="/diagnostic-log" onclick={(event) => {
+              event.preventDefault();
+              invoke("open_diagnostic_log");
+            }}>Open diagnostic log</a>
+          </p>
+          <div class="dialog-buttons about-buttons">
+            <button class="primary" onclick={closeAbout}>Close</button>
+          </div>
         </div>
       </div>
-    </div>
-  {/if}
+    {/if}
 
-  {#if aboutOpen}
-    <div class="dialog-backdrop">
-      <div class="dialog about-dialog">
-        <h2>About ProjectLog</h2>
-        <p class="about-copy">ProjectLog helps you track project changes with as little friction as possible.</p>
-        <p class="about-meta">Version {appState.app_version}</p>
-        <p class="about-meta">Developed by Karsten Garborg.</p>
-        <p class="about-links">
-          <a href="https://github.com/kargaen/ProjectLog" onclick={(event) => {
-            event.preventDefault();
-            invoke("open_project_homepage");
-          }}>ProjectLog</a>
-          <span> | </span>
-          <a href="mailto:karga@karga.dk" onclick={(event) => {
-            event.preventDefault();
-            invoke("open_feedback");
-          }}>Send feedback by mail</a>
-          <span> | </span>
-          <a href="https://karga.dk" onclick={(event) => {
-            event.preventDefault();
-            invoke("open_portfolio");
-          }}>Portfolio</a>
-        </p>
-        <p class="about-links">
-          <a href="/diagnostic-log" onclick={(event) => {
-            event.preventDefault();
-            invoke("open_diagnostic_log");
-          }}>Open diagnostic log</a>
-        </p>
-        <div class="dialog-buttons about-buttons">
-          <button class="primary" onclick={closeAbout}>Close</button>
+    {#if updatePromptOpen}
+      <div class="dialog-backdrop">
+        <div class="dialog about-dialog">
+          <h2>ProjectLog update</h2>
+          {#if updateStatus === "available"}
+            <p class="about-copy">Version {updateVersion} is ready. ProjectLog can download and install it for you.</p>
+            <p class="about-meta">Release notes open on the GitHub releases page.</p>
+            <div class="dialog-buttons about-buttons">
+              <button onclick={() => invoke("open_release_notes")}>Release notes</button>
+              <button onclick={closeUpdatePrompt}>Later</button>
+              <button class="primary" onclick={installUpdate}>Update now</button>
+            </div>
+          {:else if updateStatus === "downloading"}
+            <p class="about-copy">Downloading and installing the update.</p>
+            <p class="about-meta">{Math.round(updateProgress)}%</p>
+          {:else if updateStatus === "ready"}
+            <p class="about-copy">Update installed. ProjectLog is restarting.</p>
+          {:else}
+            <p class="about-copy">No update is ready right now.</p>
+            <div class="dialog-buttons about-buttons">
+              <button class="primary" onclick={() => (updatePromptOpen = false)}>Close</button>
+            </div>
+          {/if}
         </div>
       </div>
-    </div>
-  {/if}
-
-  {#if updatePromptOpen}
-    <div class="dialog-backdrop">
-      <div class="dialog about-dialog">
-        <h2>ProjectLog update</h2>
-        {#if updateStatus === "available"}
-          <p class="about-copy">Version {updateVersion} is ready. ProjectLog can download and install it for you.</p>
-          <p class="about-meta">Release notes open on the GitHub releases page.</p>
-          <div class="dialog-buttons about-buttons">
-            <button onclick={() => invoke("open_release_notes")}>Release notes</button>
-            <button onclick={closeUpdatePrompt}>Later</button>
-            <button class="primary" onclick={installUpdate}>Update now</button>
-          </div>
-        {:else if updateStatus === "downloading"}
-          <p class="about-copy">Downloading and installing the update.</p>
-          <p class="about-meta">{Math.round(updateProgress)}%</p>
-        {:else if updateStatus === "ready"}
-          <p class="about-copy">Update installed. ProjectLog is restarting.</p>
-        {:else}
-          <p class="about-copy">No update is ready right now.</p>
-          <div class="dialog-buttons about-buttons">
-            <button class="primary" onclick={() => (updatePromptOpen = false)}>Close</button>
-          </div>
-        {/if}
-      </div>
-    </div>
-  {/if}
-  {/if}
-
-</main>
+    {/if}
+  </main>
+{/if}
 
 <style>
   :global(body) {
@@ -1468,131 +1258,6 @@
     width: min(360px, 100%);
   }
 
-  .timesheet-window {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-    background: linear-gradient(180deg, #f5f7f1 0%, #eef1e8 100%);
-    box-sizing: border-box;
-  }
-
-  .timesheet-window-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding: 4px 2px 0;
-    cursor: default;
-  }
-
-  .timesheet-window-header h1 {
-    margin: 0;
-    color: #21352c;
-    font-size: 20px;
-  }
-
-  .timesheet-window-header p {
-    margin: 4px 0 0;
-    color: #5f675d;
-    font-size: 12px;
-  }
-
-  .timesheet-year-hint {
-    color: #267a62;
-    font-weight: 600;
-  }
-
-  .timesheet-preview-panel {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 12px;
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid #cfd5c6;
-    border-radius: 8px;
-    box-shadow: 0 14px 34px rgba(45, 55, 39, 0.1);
-  }
-
-  .timesheet-preview-loading {
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-  }
-
-  .timesheet-preview-loading h1 {
-    margin: 0;
-    color: #21352c;
-    font-size: 18px;
-  }
-
-  .timesheet-preview-loading p {
-    margin: 4px 0 0;
-    color: #5f675d;
-    font-size: 12px;
-  }
-
-  .sheet-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  .timesheet-table-wrap {
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
-    border: 1px solid #d8dccc;
-    border-radius: 5px;
-  }
-
-  .timesheet-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11px;
-    background: #fff;
-  }
-
-  .timesheet-table th,
-  .timesheet-table td {
-    padding: 6px 8px;
-    border-bottom: 1px solid #ecefe6;
-    text-align: right;
-    white-space: nowrap;
-  }
-
-  .timesheet-table th:first-child,
-  .timesheet-table td:first-child {
-    text-align: left;
-    min-width: 220px;
-  }
-
-  .timesheet-table thead th {
-    position: sticky;
-    top: 0;
-    background: #f4f5f1;
-    z-index: 1;
-  }
-
-  .comment-row td:first-child {
-    color: #697064;
-  }
-
-  .total-row td {
-    font-weight: 650;
-    background: #f8faf6;
-  }
-
-  .timesheet-window-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding-top: 2px;
-  }
-
   .update {
     padding: 6px 8px;
     background: #e9f6f1;
@@ -1630,5 +1295,4 @@
     justify-content: flex-end;
     gap: 6px;
   }
-
 </style>

@@ -45,6 +45,12 @@ struct TimesheetPreviewRequest {
     format: String,
 }
 
+#[derive(Serialize)]
+struct TimesheetPreviewBootstrap {
+    request: Option<TimesheetPreviewRequest>,
+    rounding_enabled: bool,
+}
+
 fn clean_input(value: &str) -> String {
     value
         .replace(['\t', '\r', '\n'], " ")
@@ -307,8 +313,11 @@ fn preview_timesheet(
 }
 
 #[tauri::command]
-fn get_timesheet_preview_request(state: State<AppState>) -> Option<TimesheetPreviewRequest> {
-    state.timesheet_preview_request.lock().unwrap().clone()
+fn get_timesheet_preview_bootstrap(state: State<AppState>) -> TimesheetPreviewBootstrap {
+    TimesheetPreviewBootstrap {
+        request: state.timesheet_preview_request.lock().unwrap().clone(),
+        rounding_enabled: state.settings.lock().unwrap().timesheet_rounding_enabled,
+    }
 }
 
 #[tauri::command]
@@ -319,25 +328,14 @@ async fn open_timesheet_preview_window(
 ) -> Result<(), String> {
     log!("open_timesheet_preview_window range={} format={}", range, format);
     let options = parse_timesheet_options(&range, &format)?;
-    let preview = timesheet::preview(&app.state::<AppState>().data_dir, options)?;
     let title = match options.format {
         TimesheetFormat::Recent => "ProjectLog Timesheet: Yesterday + Today",
         TimesheetFormat::Full => "ProjectLog Timesheet: Full",
     };
-    let max_columns = preview
-        .sheets
-        .iter()
-        .map(|sheet| sheet.columns.len())
-        .max()
-        .unwrap_or(2);
-    let max_rows = preview
-        .sheets
-        .iter()
-        .map(|sheet| sheet.rows.len())
-        .max()
-        .unwrap_or(8);
-    let width = (300.0 + ((max_columns + 1) as f64 * 92.0)).clamp(760.0, 1360.0);
-    let height = (220.0 + (max_rows as f64 * 26.0)).clamp(520.0, 880.0);
+    let (width, height) = match options.format {
+        TimesheetFormat::Recent => (860.0, 600.0),
+        TimesheetFormat::Full => (1120.0, 760.0),
+    };
 
     *app.state::<AppState>().timesheet_preview_request.lock().unwrap() = Some(TimesheetPreviewRequest {
         range: range.clone(),
@@ -588,6 +586,23 @@ fn save_ui_settings(
 }
 
 #[tauri::command]
+fn set_timesheet_rounding_enabled(
+    enabled: bool,
+    state: State<AppState>,
+    app: tauri::AppHandle,
+) {
+    let mut settings = state.settings.lock().unwrap();
+    if settings.timesheet_rounding_enabled == enabled {
+        return;
+    }
+
+    settings.timesheet_rounding_enabled = enabled;
+    settings::save(&state.data_dir, &settings);
+    drop(settings);
+    emit_state_changed(&app);
+}
+
+#[tauri::command]
 fn save_quickpanel_bounds(x: f64, y: f64, width: f64, height: f64, state: State<AppState>) {
     let mut settings = state.settings.lock().unwrap();
     settings.quickpanel_x = Some(x);
@@ -672,7 +687,7 @@ pub fn run() {
             remove_project,
             generate_timesheet,
             preview_timesheet,
-            get_timesheet_preview_request,
+            get_timesheet_preview_bootstrap,
             open_timesheet_preview_window,
             generate_timesheet_export,
             reset_timesheet,
@@ -686,6 +701,7 @@ pub fn run() {
             open_release_notes,
             set_update_available,
             save_ui_settings,
+            set_timesheet_rounding_enabled,
             save_quickpanel_bounds,
             log_from_frontend
         ])

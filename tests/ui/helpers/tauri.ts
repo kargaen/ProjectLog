@@ -30,6 +30,8 @@ type MockPreviewRequest = {
 
 type MockPreview = {
   title: string;
+  generated_at: string;
+  generated_at_epoch_ms: number;
   sheets: Array<{
     name: string;
     columns: string[];
@@ -94,6 +96,8 @@ export async function installTauriMocks(
 
   const previewResponse: MockPreview = options?.previewResponse ?? {
     title: "Full timesheet",
+    generated_at: "2026-04-30 07:09",
+    generated_at_epoch_ms: Date.UTC(2026, 3, 30, 5, 9, 0),
     sheets: [
       {
         name: "2026-18",
@@ -184,8 +188,11 @@ export async function installTauriMocks(
         switch (cmd) {
           case "get_state":
             return JSON.parse(JSON.stringify(clonedState));
-          case "get_timesheet_preview_request":
-            return previewRequest;
+          case "get_timesheet_preview_bootstrap":
+            return {
+              request: previewRequest,
+              rounding_enabled: clonedState.settings.timesheet_rounding_enabled,
+            };
           case "preview_timesheet":
             return JSON.parse(JSON.stringify(previewResponse));
           case "select_project":
@@ -238,6 +245,9 @@ export async function installTauriMocks(
               ...((args.projectRecentUsage as Record<string, number>) ?? {}),
             };
             clonedState.settings.timesheet_rounding_enabled = Boolean(args.timesheetRoundingEnabled);
+            return null;
+          case "set_timesheet_rounding_enabled":
+            clonedState.settings.timesheet_rounding_enabled = Boolean(args.enabled);
             return null;
           case "save_quickpanel_bounds":
           case "set_update_available":
