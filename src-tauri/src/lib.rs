@@ -343,18 +343,8 @@ async fn open_timesheet_preview_window(
     });
 
     if let Some(window) = app.get_webview_window("timesheet-preview") {
-        let _ = window.set_title(title);
-        let _ = window.set_size(LogicalSize::new(width, height));
-        let _ = window.emit(
-            "show-timesheet-preview",
-            serde_json::json!({
-                "range": range,
-                "format": format,
-            }),
-        );
-        let _ = window.show();
-        let _ = window.set_focus();
-        return Ok(());
+        window.close().map_err(|e| e.to_string())?;
+        std::thread::sleep(std::time::Duration::from_millis(60));
     }
 
     let config = app
@@ -374,13 +364,6 @@ async fn open_timesheet_preview_window(
     let _ = window.set_size(LogicalSize::new(width, height));
     let _ = window.show();
     let _ = window.set_focus();
-    let _ = window.emit(
-        "show-timesheet-preview",
-        serde_json::json!({
-            "range": range,
-            "format": format,
-        }),
-    );
 
     Ok(())
 }

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { createLogger } from "../logger";
   import {
     buildTimesheetDisplayRows,
@@ -32,6 +32,7 @@
   let relativeTimeNow = $state(Date.now());
 
   const currentWindow = getCurrentWindow();
+  const currentWebviewWindow = getCurrentWebviewWindow();
 
   function formatHours(value: number) {
     return formatPreviewHours(value, timesheetRoundingEnabled);
@@ -153,7 +154,7 @@
     };
 
     void (async () => {
-      const unlistenTimesheetPreview = listen<TimesheetPreviewRequest>(
+      const unlistenTimesheetPreview = currentWebviewWindow.listen<TimesheetPreviewRequest>(
         "show-timesheet-preview",
         (event) => {
           loadPreview(event.payload.range, event.payload.format, {
@@ -412,12 +413,16 @@
 
   .timesheet-status-shell {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: nowrap;
   }
 
   .timesheet-generated-status {
+    display: inline-flex;
+    align-items: center;
     padding: 7px 9px;
     border: 1px solid #ced8ae;
     border-radius: 6px;
@@ -425,6 +430,7 @@
     color: #405120;
     font-size: 11px;
     text-align: right;
+    white-space: nowrap;
   }
 
   .timesheet-preview-panel {
@@ -599,7 +605,7 @@
     margin-left: 14px;
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 640px) {
     .timesheet-window-header,
     .timesheet-window-footer {
       flex-direction: column;
@@ -607,7 +613,7 @@
     }
 
     .timesheet-status-shell {
-      align-items: stretch;
+      justify-content: flex-start;
     }
 
     .timesheet-generated-status {

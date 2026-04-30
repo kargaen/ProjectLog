@@ -1,5 +1,8 @@
-Refactor timesheet preview and lighten dedicated window startup
+# Release Log
 
-- Split the dedicated timesheet preview into its own frontend component and bootstrap flow so preview loading no longer piggybacks on the QuickPanel lifecycle.
-- Refactored the Rust timesheet pipeline so preview and Excel export share one report model, reducing duplication and drift between data and view behavior.
-- Added banded preview rows, darker header and total styling, row-and-column crosshair hover highlighting, and a live generated timestamp with an `Update now` refresh action.
+Write the next release message here as you build features.
+
+Guidelines:
+- Keep the first line short. Git will use it as the commit subject.
+- Add extra lines below for details when useful.
+- Remove placeholder text before releasing.
