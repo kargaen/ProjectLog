@@ -26,9 +26,7 @@
       "label": "ProjectLog: Pull WIP",
       "type": "shell",
       "command": "git",
-      "args": [
-        "pull"
-      ],
+      "args": ["pull"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -43,9 +41,7 @@
       "label": "ProjectLog: Release",
       "type": "shell",
       "command": "node",
-      "args": [
-        "${workspaceFolder}/scripts/release.mjs"
-      ],
+      "args": ["${workspaceFolder}/scripts/release.mjs"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -66,27 +62,6 @@
         "Bypass",
         "-Command",
         "cargo test --manifest-path src-tauri/Cargo.toml; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm.cmd run test:ui"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "ProjectLog: Run UI Tests (Headed)",
-      "type": "shell",
-      "command": "powershell",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "npm.cmd run test:ui -- --headed"
       ],
       "options": {
         "cwd": "${workspaceFolder}"

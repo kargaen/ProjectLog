@@ -1,0 +1,301 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #eef1e8;
+  color: #20241f;
+}
+
+.timesheet-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: linear-gradient(180deg, #f5f7f1 0%, #eef1e8 100%);
+  box-sizing: border-box;
+}
+
+.timesheet-screen h1,
+.timesheet-screen p {
+  margin: 0;
+}
+
+.timesheet-screen button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #c9cebf;
+  border-radius: 4px;
+  background: #fff;
+  color: #20241f;
+  padding: 5px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.timesheet-screen button:hover:not(:disabled) {
+  background: #f2f5ee;
+}
+
+.timesheet-screen button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.timesheet-screen .primary {
+  border-color: #267a62;
+  background: #267a62;
+  color: #fff;
+}
+
+.timesheet-screen .primary:hover:not(:disabled) {
+  background: #216b56;
+}
+
+.timesheet-screen .ghost {
+  color: #495047;
+}
+
+.timesheet-screen .small {
+  padding: 4px 7px;
+}
+
+.timesheet-screen .timesheet-window-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px 0;
+  cursor: default;
+}
+
+.timesheet-screen .timesheet-window-header h1 {
+  color: #21352c;
+  font-size: 20px;
+}
+
+.timesheet-screen .timesheet-window-header p {
+  margin-top: 4px;
+  color: #5f675d;
+  font-size: 12px;
+}
+
+.timesheet-screen .timesheet-year-hint {
+  color: #267a62;
+  font-weight: 600;
+}
+
+.timesheet-screen .timesheet-status-shell {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.timesheet-screen .timesheet-generated-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 9px;
+  border: 1px solid #ced8ae;
+  border-radius: 6px;
+  background: #e1e9bf;
+  color: #405120;
+  font-size: 11px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.timesheet-screen .timesheet-preview-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #cfd5c6;
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(45, 55, 39, 0.1);
+}
+
+.timesheet-screen .timesheet-preview-loading {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.timesheet-screen .timesheet-preview-loading h1 {
+  color: #21352c;
+  font-size: 18px;
+}
+
+.timesheet-screen .timesheet-preview-loading p {
+  margin-top: 4px;
+  color: #5f675d;
+  font-size: 12px;
+}
+
+.timesheet-screen .sheet-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.timesheet-screen .sort-active {
+  border-color: #267a62;
+  background: #e9f6f1;
+  color: #267a62;
+}
+
+.timesheet-screen .timesheet-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #d8dccc;
+  border-radius: 5px;
+}
+
+.timesheet-screen .timesheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  background: #fff;
+}
+
+.timesheet-screen .timesheet-table th,
+.timesheet-screen .timesheet-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #ecefe6;
+  text-align: right;
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.timesheet-screen .timesheet-table th:first-child,
+.timesheet-screen .timesheet-table td:first-child {
+  text-align: left;
+  min-width: 220px;
+}
+
+.timesheet-screen .timesheet-table thead th {
+  position: sticky;
+  top: 0;
+  background: #dbe5c5;
+  color: #304122;
+  z-index: 1;
+}
+
+.timesheet-screen .banded-row td {
+  background: #f3f7eb;
+}
+
+.timesheet-screen .comment-row td:first-child {
+  color: #697064;
+}
+
+.timesheet-screen .comment-row td {
+  color: #495047;
+}
+
+.timesheet-screen .total-row td {
+  font-weight: 650;
+  background: #dfe9cf;
+  color: #26331c;
+}
+
+.timesheet-screen .crosshair-row td {
+  background: #f8d9de;
+}
+
+.timesheet-screen .crosshair-row.banded-row td {
+  background: #f3cfd7;
+}
+
+.timesheet-screen .crosshair-row.total-row td {
+  background: #efc7cf;
+}
+
+.timesheet-screen .crosshair-column {
+  box-shadow: inset 0 0 0 9999px rgba(244, 154, 169, 0.22);
+}
+
+.timesheet-screen .timesheet-window-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.timesheet-screen .toggle-row,
+.timesheet-screen .dialog-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timesheet-screen .toggle-row span {
+  flex: 1;
+  font-size: 11px;
+  color: #495047;
+}
+
+.timesheet-screen .toggle {
+  width: 30px;
+  height: 18px;
+  border-radius: 10px;
+  padding: 0;
+  justify-content: flex-start;
+  background: #d8dccc;
+}
+
+.timesheet-screen .toggle:hover:not(:disabled) {
+  background: #d8dccc;
+}
+
+.timesheet-screen .toggle span {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: #fff;
+  transition: margin-left 120ms ease;
+}
+
+.timesheet-screen .toggle.toggle-on {
+  background: #267a62;
+}
+
+.timesheet-screen .toggle.toggle-on:hover:not(:disabled) {
+  background: #267a62;
+}
+
+.timesheet-screen .toggle.toggle-on span {
+  margin-left: 14px;
+}
+
+@media (max-width: 640px) {
+  .timesheet-screen .timesheet-window-header,
+  .timesheet-screen .timesheet-window-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .timesheet-screen .timesheet-status-shell {
+    justify-content: flex-start;
+  }
+
+  .timesheet-screen .timesheet-generated-status {
+    text-align: left;
+  }
+
+  .timesheet-screen .dialog-buttons {
+    justify-content: flex-end;
+  }
+}
