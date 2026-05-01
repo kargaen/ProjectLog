@@ -4,6 +4,12 @@ export type TimesheetDisplayRow = TimesheetPreviewRow & {
   band_index: number;
 };
 
+const ZERO_EPSILON = 0.000001;
+
+function isZeroHours(value: number) {
+  return Math.abs(value) < ZERO_EPSILON;
+}
+
 export function roundHalfPreservingSum(values: number[]) {
   const step = 0.5;
   const floors = values.map((value) => Math.floor(value / step) * step);
@@ -80,6 +86,10 @@ export function buildTimesheetDisplayRows(
 }
 
 export function formatPreviewHours(value: number, roundingEnabled: boolean) {
+  if (isZeroHours(value)) {
+    return "-";
+  }
+
   return roundingEnabled ? value.toFixed(1) : value.toFixed(2);
 }
 

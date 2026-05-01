@@ -2,7 +2,6 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { createLogger } from "../logger";
   import {
     buildTimesheetDisplayRows,
@@ -32,8 +31,6 @@
   let relativeTimeNow = $state(Date.now());
 
   const currentWindow = getCurrentWindow();
-  const currentWebviewWindow = getCurrentWebviewWindow();
-
   function formatHours(value: number) {
     return formatPreviewHours(value, timesheetRoundingEnabled);
   }
@@ -97,7 +94,7 @@
   }
 
   async function closeTimesheetPreviewWindow() {
-    await currentWindow.close().catch(() => {});
+    await invoke("hide_timesheet_preview_window").catch(() => {});
   }
 
   async function toggleTimesheetRounding() {
@@ -154,7 +151,7 @@
     };
 
     void (async () => {
-      const unlistenTimesheetPreview = currentWebviewWindow.listen<TimesheetPreviewRequest>(
+      const unlistenTimesheetPreview = currentWindow.listen<TimesheetPreviewRequest>(
         "show-timesheet-preview",
         (event) => {
           loadPreview(event.payload.range, event.payload.format, {
@@ -201,13 +198,6 @@
     <header class="timesheet-window-header" onmousedown={startWindowDrag}>
       <div>
         <h1>{timesheetPreview.title}</h1>
-        <p>
-          {#if timesheetPreviewFormat === "recent"}
-            Yesterday + today overview
-          {:else}
-            Weekly tabs from the full ProjectLog history
-          {/if}
-        </p>
         {#if timesheetPreviewYears.length > 1}
           <p class="timesheet-year-hint">
             Includes weeks from {timesheetPreviewYears.join(", ")}

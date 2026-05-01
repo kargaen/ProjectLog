@@ -9,6 +9,11 @@ use crate::{log, log_debug, log_warn};
 
 const DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 const PREVIEW_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M";
+const ZERO_EPSILON: f64 = 0.000001;
+
+fn is_zero_hours(value: f64) -> bool {
+    value.abs() < ZERO_EPSILON
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TimesheetRange {
@@ -354,12 +359,17 @@ fn write_hours_cell(
     right_fmt: &Format,
     decimal_right_fmt: &Format,
 ) -> Result<(), String> {
+    if is_zero_hours(value) {
+        sheet
+            .write_string_with_format(row_index, column_index, "-", right_fmt)
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
     if row.is_comment {
-        if value > 0.0 {
-            sheet
-                .write_number_with_format(row_index, column_index, value, decimal_right_fmt)
-                .map_err(|e| e.to_string())?;
-        }
+        sheet
+            .write_number_with_format(row_index, column_index, value, decimal_right_fmt)
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
 
@@ -428,14 +438,15 @@ fn write_sheet(
             )?;
         }
 
-        worksheet
-            .write_number_with_format(
-                row_index,
-                (row.values.len() + 1) as u16,
-                row.total,
-                &decimal_right_fmt,
-            )
-            .map_err(|e| e.to_string())?;
+        write_hours_cell(
+            worksheet,
+            row_index,
+            (row.values.len() + 1) as u16,
+            row.total,
+            row,
+            &right_fmt,
+            &decimal_right_fmt,
+        )?;
     }
 
     Ok(())
@@ -546,6 +557,28 @@ mod tests {
         path
     }
 
+    fn write_log(dir: &Path, lines: &[String]) {
+        fs::write(dir.join("log.dat"), lines.join("\n") + "\n").unwrap();
+    }
+
+    fn build_relative_log_fixture() -> Vec<String> {
+        let today = Local::now().naive_local().date();
+        let yesterday = today - TimeDelta::days(1);
+        let monday_this_week = today - TimeDelta::days(today.weekday().num_days_from_monday() as i64);
+        let previous_week_monday = monday_this_week - TimeDelta::days(7);
+
+        vec![
+            format!("{} 09:00:00\tAlpha\tLegacy planning", previous_week_monday.format("%Y-%m-%d")),
+            format!("{} 11:00:00\tBeta", previous_week_monday.format("%Y-%m-%d")),
+            format!("{} 09:00:00\tBeta\tBuild", monday_this_week.format("%Y-%m-%d")),
+            format!("{} 12:00:00\tGamma", monday_this_week.format("%Y-%m-%d")),
+            format!("{} 08:30:00\tGamma\tReview", yesterday.format("%Y-%m-%d")),
+            format!("{} 10:00:00\tAlpha\tSupport", yesterday.format("%Y-%m-%d")),
+            format!("{} 09:15:00\tAlpha\tDelivery", today.format("%Y-%m-%d")),
+            format!("{} 12:15:00\t", today.format("%Y-%m-%d")),
+        ]
+    }
+
     #[test]
     fn generates_for_long_stretches_past_midnight() {
         let dir = temp_dir("timesheet-long");
@@ -587,6 +620,26 @@ mod tests {
 
         assert!(path.ends_with("timesheet-yesterday-today.xlsx"));
         assert!(path.exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn preview_recent_uses_relative_fixture_for_yesterday_and_today() {
+        let dir = temp_dir("timesheet-preview-recent-relative");
+        write_log(&dir, &build_relative_log_fixture());
+
+        let preview = preview(&dir, TimesheetOptions::recent()).unwrap();
+
+        assert_eq!(preview.title, "Yesterday + today");
+        assert_eq!(preview.sheets.len(), 1);
+        assert_eq!(preview.sheets[0].columns.len(), 2);
+        assert!(preview.sheets[0].rows.iter().any(|row| row.label == "Alpha"));
+        assert!(preview.sheets[0].rows.iter().any(|row| row.label == "Total"));
+        assert!(preview.sheets[0].rows.iter().any(|row| row.total >= 3.0));
+        assert_eq!(preview.sheets[0].rows.last().unwrap().label, "Total");
+        assert_eq!(preview.sheets[0].rows.last().unwrap().values.len(), 2);
+        assert!(preview.generated_at_epoch_ms > 0);
+
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -642,4 +695,36 @@ mod tests {
         assert_eq!(preview.sheets[1].rows.last().unwrap().total, 3.0);
         let _ = fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn preview_full_relative_fixture_spans_multiple_weeks_and_comments() {
+        let dir = temp_dir("timesheet-preview-full-relative");
+        write_log(&dir, &build_relative_log_fixture());
+
+        let preview = preview(&dir, TimesheetOptions::full(TimesheetRange::All)).unwrap();
+
+        assert_eq!(preview.title, "Full timesheet");
+        assert!(preview.sheets.len() >= 2);
+        assert!(preview.sheets.iter().all(|sheet| sheet.name.contains('-')));
+        assert!(preview
+            .sheets
+            .iter()
+            .flat_map(|sheet| sheet.rows.iter())
+            .any(|row| row.label == "  - Legacy planning"));
+        assert!(preview
+            .sheets
+            .iter()
+            .flat_map(|sheet| sheet.rows.iter())
+            .any(|row| row.label == "  - Build"));
+        assert!(preview
+            .sheets
+            .iter()
+            .all(|sheet| sheet.rows.last().map(|row| row.label.as_str()) == Some("Total")));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // Deferred: inject a clock into preview/generate parsing so these tests can freeze "now"
+    // instead of building relative fixtures from Local::now(). The current relative approach is
+    // practical and valuable, but a clock abstraction would make week and recent boundaries fully deterministic.
 }

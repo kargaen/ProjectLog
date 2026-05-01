@@ -5,8 +5,8 @@
   import {
     availableMonitors,
     getCurrentWindow,
-    LogicalPosition,
-    LogicalSize,
+    PhysicalPosition,
+    PhysicalSize,
     primaryMonitor,
   } from "@tauri-apps/api/window";
   import { check, type Update } from "@tauri-apps/plugin-updater";
@@ -23,9 +23,9 @@
   import appIcon from "../icon.svg";
 
   const log = createLogger("quickpanel");
-  const MIN_QUICKPANEL_WIDTH = 300;
-  const MIN_NORMAL_HEIGHT = 430;
-  const MIN_COMPACT_HEIGHT = 220;
+  const MIN_WINDOW_WIDTH = 220;
+  const MIN_WINDOW_HEIGHT = 90;
+  const AUTO_COMPACT_HEIGHT = 430;
   const MIN_OPACITY = 0.35;
 
   let appState = $state<ProjectState>({
@@ -68,7 +68,6 @@
   let draggedProject = $state<string | null>(null);
   let dropTargetProject = $state<string | null>(null);
   let dropPosition = $state<"before" | "after">("before");
-  let effectiveSortMode = $derived<SortMode>(quickPanelMode === "compact" ? "manual" : sortMode);
 
   let dialogOpen = $state(false);
   let aboutOpen = $state(false);
@@ -80,12 +79,46 @@
   let closeInputOnSubmit = $state(true);
   let ignoredStateChangedEvents = $state(0);
   let timesheetRoundingEnabled = $state(false);
+  let currentWindowHeight = $state(Infinity);
 
-  const currentWindow = getCurrentWindow();
-  const currentWindowLabel = currentWindow.label;
   const windowParams = new URLSearchParams(window.location.search);
+  const tauriWindowLabel =
+    (window as Window & {
+      __TAURI_INTERNALS__?: {
+        metadata?: {
+          currentWindow?: { label?: string };
+        };
+      };
+    }).__TAURI_INTERNALS__?.metadata?.currentWindow?.label;
+  const currentWindow = getCurrentWindow();
+  const currentWindowLabel = tauriWindowLabel ?? windowParams.get("window") ?? "main";
   const isDedicatedTimesheetPreviewWindow =
     windowParams.get("window") === "timesheet-preview" || currentWindowLabel === "timesheet-preview";
+  const isCompactLayout = $derived(
+    quickPanelMode === "compact" || currentWindowHeight < AUTO_COMPACT_HEIGHT
+  );
+  let effectiveSortMode = $derived<SortMode>(isCompactLayout ? "manual" : sortMode);
+
+  async function getMinimumWindowSizePhysical() {
+    const scaleFactor = await currentWindow.scaleFactor().catch(() => 1);
+
+    return {
+      minWidth: Math.ceil(MIN_WINDOW_WIDTH * scaleFactor),
+      minHeight: Math.ceil(MIN_WINDOW_HEIGHT * scaleFactor),
+    };
+  }
+
+  async function updateWindowHeight(nextHeight?: number) {
+    const scaleFactor = await currentWindow.scaleFactor().catch(() => 1);
+    if (nextHeight !== undefined) {
+      currentWindowHeight = nextHeight / scaleFactor;
+      return;
+    }
+
+    const size = await currentWindow.outerSize().catch(() => null);
+    if (!size) return;
+    currentWindowHeight = size.height / scaleFactor;
+  }
 
   function clamp(value: number, min: number, max: number) {
     return Math.min(Math.max(value, min), max);
@@ -119,7 +152,7 @@
     const savedHeight = appState.settings.quickpanel_height;
     const savedX = appState.settings.quickpanel_x;
     const savedY = appState.settings.quickpanel_y;
-    const minHeight = appState.settings.quickpanel_mode === "compact" ? MIN_COMPACT_HEIGHT : MIN_NORMAL_HEIGHT;
+    const { minWidth, minHeight } = await getMinimumWindowSizePhysical();
 
     if (!savedWidth || !savedHeight) {
       return;
@@ -129,9 +162,11 @@
     const fallbackMonitor = (await primaryMonitor().catch(() => null)) ?? monitors[0] ?? null;
 
     if (!fallbackMonitor) {
-      await currentWindow.setSize(new LogicalSize(savedWidth, savedHeight)).catch(() => {});
+      await currentWindow
+        .setSize(new PhysicalSize(Math.max(savedWidth, minWidth), Math.max(savedHeight, minHeight)))
+        .catch(() => {});
       if (savedX !== null && savedY !== null) {
-        await currentWindow.setPosition(new LogicalPosition(savedX, savedY)).catch(() => {});
+        await currentWindow.setPosition(new PhysicalPosition(savedX, savedY)).catch(() => {});
       }
       return;
     }
@@ -149,7 +184,7 @@
       }) ?? fallbackMonitor;
 
     const area = targetMonitor.workArea;
-    const width = clamp(savedWidth, MIN_QUICKPANEL_WIDTH, area.size.width);
+    const width = clamp(savedWidth, minWidth, area.size.width);
     const height = clamp(savedHeight, minHeight, area.size.height);
     const x = clamp(
       savedX ?? area.position.x + 32,
@@ -162,8 +197,8 @@
       area.position.y + Math.max(area.size.height - height, 0)
     );
 
-    await currentWindow.setSize(new LogicalSize(width, height)).catch(() => {});
-    await currentWindow.setPosition(new LogicalPosition(x, y)).catch(() => {});
+    await currentWindow.setSize(new PhysicalSize(width, height)).catch(() => {});
+    await currentWindow.setPosition(new PhysicalPosition(x, y)).catch(() => {});
   }
 
   function applyAppState(nextState: ProjectState, options?: { preserveMode?: boolean }) {
@@ -231,19 +266,14 @@
     });
   }
 
-  async function applyQuickpanelModeLayout(mode: QuickPanelMode) {
-    const minHeight = mode === "compact" ? MIN_COMPACT_HEIGHT : MIN_NORMAL_HEIGHT;
-    await currentWindow.setMinSize(new LogicalSize(MIN_QUICKPANEL_WIDTH, minHeight)).catch(() => {});
-
-    try {
-      const size = await currentWindow.outerSize();
-      if (size.height < minHeight) {
-        await currentWindow.setSize(
-          new LogicalSize(Math.max(size.width, MIN_QUICKPANEL_WIDTH), minHeight)
-        ).catch(() => {});
-      }
-    } catch {
-    }
+  async function applyQuickpanelModeLayout() {
+    await currentWindow
+      .setSizeConstraints({
+        minWidth: MIN_WINDOW_WIDTH,
+        minHeight: MIN_WINDOW_HEIGHT,
+      })
+      .catch(() => {});
+    await updateWindowHeight().catch(() => {});
   }
 
   async function selectProject(project: string) {
@@ -338,7 +368,7 @@
     if (quickPanelMode === nextMode) return;
     quickPanelMode = nextMode;
     await persistUiSettings();
-    await applyQuickpanelModeLayout(nextMode);
+    await applyQuickpanelModeLayout();
     log.info("setQuickPanelMode", { quickPanelMode: nextMode });
   }
 
@@ -498,12 +528,16 @@
       log.info("mounted");
       await loadState();
       await restoreQuickPanelBounds();
-      await applyQuickpanelModeLayout(quickPanelMode);
+      await applyQuickpanelModeLayout();
       await currentWindow.setAlwaysOnTop(alwaysOnTop);
       await checkForUpdate();
       if (openOnStart) await currentWindow.show();
 
       let lastBounds = "";
+      const unlistenResized = currentWindow.onResized(async ({ payload: size }) => {
+        await updateWindowHeight(size.height).catch(() => {});
+      });
+
       const interval = setInterval(async () => {
         try {
           const pos = await currentWindow.outerPosition();
@@ -552,6 +586,7 @@
 
       cleanup = () => {
         clearInterval(interval);
+        unlistenResized.then((fn) => fn());
         unlistenInput.then((fn) => fn());
         unlistenAbout.then((fn) => fn());
         unlistenState.then((fn) => fn());
@@ -589,7 +624,7 @@
 {#if isDedicatedTimesheetPreviewWindow}
   <TimesheetPreviewWindow />
 {:else}
-  <main class:compact-shell={quickPanelMode === "compact"} style:opacity={quickPanelOpacity}>
+  <main class:compact-shell={isCompactLayout} style:opacity={quickPanelOpacity}>
     {#if updateStatus !== "idle"}
       <section class="update">
         <div>
@@ -610,7 +645,7 @@
         <div>
           <h1>ProjectLog QuickPanel</h1>
           <p>{appState.active_project || "No active project"}</p>
-          {#if quickPanelMode === "normal" && appState.active_comment}
+          {#if !isCompactLayout && appState.active_comment}
             <p class="active-comment">{appState.active_comment}</p>
           {/if}
         </div>
@@ -625,7 +660,7 @@
     </header>
 
     <section class="panel project-panel">
-      {#if quickPanelMode === "normal"}
+      {#if !isCompactLayout}
         <div class="sort-row">
           <button class:sort-active={sortMode === "manual"} onclick={() => setSortMode("manual")}>Manual</button>
           <button class:sort-active={sortMode === "alphabetical"} onclick={() => setSortMode("alphabetical")}>A-Z</button>
@@ -673,91 +708,94 @@
       </div>
     </section>
 
-    {#if quickPanelMode === "normal"}
-      <section class="panel compact">
-        <input
-          id="comment"
-          bind:value={commentText}
-          disabled={!appState.active_project}
-          placeholder="Comment"
-          onkeydown={(event) => isEnterSubmit(event) && saveComment()}
-        />
-        <button onclick={saveComment} disabled={!appState.active_project}>Save</button>
-        <button onclick={clearComment} disabled={!appState.active_project || !commentText}>Clear</button>
-      </section>
+    {#if !isCompactLayout}
+      <div class="normal-controls-scroll">
+        <section class="panel compact">
+          <input
+            id="comment"
+            bind:value={commentText}
+            disabled={!appState.active_project}
+            placeholder="Comment"
+            onkeydown={(event) => isEnterSubmit(event) && saveComment()}
+          />
+          <button onclick={saveComment} disabled={!appState.active_project}>Save</button>
+          <button onclick={clearComment} disabled={!appState.active_project || !commentText}>Clear</button>
+        </section>
 
-      <section class="panel compact">
-        <input
-          bind:value={newProjectName}
-          placeholder="Add project"
-          onkeydown={(event) => isEnterSubmit(event) && addProject()}
-        />
-        <button onclick={addProject}>Add</button>
-      </section>
+        <section class="panel compact">
+          <input
+            bind:value={newProjectName}
+            placeholder="Add project"
+            onkeydown={(event) => isEnterSubmit(event) && addProject()}
+          />
+          <button onclick={addProject}>Add</button>
+        </section>
 
-      <section class="panel compact">
-        <input
-          bind:value={quickName}
-          placeholder="Quick project"
-          onkeydown={(event) => isEnterSubmit(event) && trackQuick(false)}
-        />
-        <button onclick={() => trackQuick(false)}>Track</button>
-      </section>
+        <section class="panel compact">
+          <input
+            bind:value={quickName}
+            placeholder="Quick project"
+            onkeydown={(event) => isEnterSubmit(event) && trackQuick(false)}
+          />
+          <button onclick={() => trackQuick(false)}>Track</button>
+        </section>
 
-      <section class="actions">
-        <button onclick={() => openTimesheetPreview("all")}>Full timesheet</button>
-        <button onclick={() => openTimesheetPreview("today", "recent")}>Yesterday + today</button>
-        <button onclick={() => invoke("open_log_file")}>Open log file</button>
-        <button onclick={resetTimesheet}>Reset timesheet</button>
-        <button onclick={resetProjects}>Reset projects</button>
-      </section>
+        <section class="actions">
+          <button onclick={() => openTimesheetPreview("all")}>Full timesheet</button>
+          <button onclick={() => openTimesheetPreview("today", "recent")}>Yesterday + today</button>
+          <button onclick={() => invoke("open_log_file")}>Open log file</button>
+          <button onclick={resetTimesheet}>Reset timesheet</button>
+          <button onclick={resetProjects}>Reset projects</button>
+        </section>
+
+        <section class="panel footer">
+          <div class="toggle-row">
+            <span>Always on top</span>
+            <button
+              aria-label="Always on top"
+              class:toggle-on={alwaysOnTop}
+              class="toggle"
+              onclick={toggleAlwaysOnTop}
+            ><span></span></button>
+          </div>
+          <div class="toggle-row">
+            <span>Open QuickPanel on start</span>
+            <button
+              aria-label="Open QuickPanel on start"
+              class:toggle-on={openOnStart}
+              class="toggle"
+              onclick={toggleOpenOnStart}
+            ><span></span></button>
+          </div>
+          <div class="opacity-row">
+            <span>Opacity</span>
+            <input
+              type="range"
+              min={Math.round(MIN_OPACITY * 100)}
+              max="100"
+              step="1"
+              value={Math.round(quickPanelOpacity * 100)}
+              oninput={(event) => {
+                const target = event.currentTarget as HTMLInputElement;
+                quickPanelOpacity = Number(target.value) / 100;
+                queueSettingsSave();
+              }}
+            />
+            <strong>{Math.round(quickPanelOpacity * 100)}%</strong>
+          </div>
+          <div class="feedback">
+            <button onclick={openAbout}>About</button>
+          </div>
+        </section>
+      </div>
     {/if}
 
-    <section class="panel footer" class:compact-footer={quickPanelMode === "compact"}>
-      {#if quickPanelMode === "normal"}
-        <div class="toggle-row">
-          <span>Always on top</span>
-          <button
-            aria-label="Always on top"
-            class:toggle-on={alwaysOnTop}
-            class="toggle"
-            onclick={toggleAlwaysOnTop}
-          ><span></span></button>
-        </div>
-        <div class="toggle-row">
-          <span>Open QuickPanel on start</span>
-          <button
-            aria-label="Open QuickPanel on start"
-            class:toggle-on={openOnStart}
-            class="toggle"
-            onclick={toggleOpenOnStart}
-          ><span></span></button>
-        </div>
-        <div class="opacity-row">
-          <span>Opacity</span>
-          <input
-            type="range"
-            min={Math.round(MIN_OPACITY * 100)}
-            max="100"
-            step="1"
-            value={Math.round(quickPanelOpacity * 100)}
-            oninput={(event) => {
-              const target = event.currentTarget as HTMLInputElement;
-              quickPanelOpacity = Number(target.value) / 100;
-              queueSettingsSave();
-            }}
-          />
-          <strong>{Math.round(quickPanelOpacity * 100)}%</strong>
-        </div>
-        <div class="feedback">
-          <button onclick={openAbout}>About</button>
-        </div>
-      {/if}
+    <section class="panel footer" class:compact-footer={isCompactLayout}>
       <div class="toggle-row">
         <span>Compact mode</span>
         <button
           aria-label="Compact mode"
-          class:toggle-on={quickPanelMode === "compact"}
+          class:toggle-on={isCompactLayout}
           class="toggle"
           onclick={toggleQuickPanelMode}
         ><span></span></button>
@@ -915,6 +953,9 @@
   h1 {
     font-size: 12px;
     font-weight: 650;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   h2 {
@@ -925,6 +966,8 @@
     margin-top: 1px;
     color: #697064;
     font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .panel {
@@ -975,6 +1018,15 @@
   .compact-shell .project-list {
     padding-top: 0;
     padding-bottom: 0;
+  }
+
+  .normal-controls-scroll {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    padding-right: 1px;
   }
 
   .project-row {
@@ -1035,10 +1087,18 @@
   }
 
   .project-button {
+    min-width: 0;
     min-height: 26px;
     justify-content: space-between;
     text-align: left;
     font-size: 11px;
+  }
+
+  .project-button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .project-row.active .project-button {
@@ -1047,6 +1107,7 @@
   }
 
   strong {
+    flex: none;
     font-size: 10px;
     color: #267a62;
   }

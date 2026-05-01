@@ -54,6 +54,36 @@ function getCurrentVersion() {
   return readJson(path.join(repoRoot, "package.json")).version;
 }
 
+function bumpVersion(currentVersion, releaseType) {
+  const match = currentVersion.match(/^(\d+)\.(\d+)\.(\d+)(?:-.+)?$/);
+  if (!match) {
+    throw new Error(`Current version is not a supported semver value: ${currentVersion}`);
+  }
+
+  let major = Number(match[1]);
+  let minor = Number(match[2]);
+  let patch = Number(match[3]);
+
+  switch (releaseType) {
+    case "major":
+      major += 1;
+      minor = 0;
+      patch = 0;
+      break;
+    case "minor":
+      minor += 1;
+      patch = 0;
+      break;
+    case "patch":
+      patch += 1;
+      break;
+    default:
+      throw new Error("Release type must be major, minor, patch, or an explicit version.");
+  }
+
+  return `${major}.${minor}.${patch}`;
+}
+
 function isValidVersion(version) {
   return /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version);
 }
@@ -123,28 +153,33 @@ async function promptForVersion(currentVersion) {
   try {
     console.log(`Current version: ${currentVersion}`);
     console.log("This will sync version files, create a release commit, tag v<version>, and push both branch and tag.");
+    console.log("Reply with major, minor, patch, or an explicit version like 2.4.0.");
 
-    const entered = (await rl.question("Enter new version number: ")).trim();
+    const entered = (await rl.question("Release type or version: ")).trim();
     if (!entered) {
       console.log("No version entered. Release cancelled.");
       process.exit(0);
     }
 
-    if (entered === currentVersion) {
+    const normalized = ["major", "minor", "patch"].includes(entered)
+      ? bumpVersion(currentVersion, entered)
+      : entered;
+
+    if (normalized === currentVersion) {
       throw new Error("New version must differ from the current version.");
     }
 
-    if (!isValidVersion(entered)) {
+    if (!isValidVersion(normalized)) {
       throw new Error("Version must look like 1.2.3 or 1.2.3-beta.1");
     }
 
-    const confirmation = (await rl.question("Type the version again to confirm release: ")).trim();
-    if (confirmation !== entered) {
+    const confirmation = (await rl.question(`Type ${normalized} again to confirm release: `)).trim();
+    if (confirmation !== normalized) {
       console.log("Confirmation did not match. Release cancelled.");
       process.exit(0);
     }
 
-    return entered;
+    return normalized;
   } finally {
     rl.close();
   }
@@ -152,7 +187,12 @@ async function promptForVersion(currentVersion) {
 
 async function main() {
   const currentVersion = getCurrentVersion();
-  const requestedVersion = process.argv[2]?.trim();
+  const requestedValue = process.argv[2]?.trim();
+  const requestedVersion = requestedValue
+    ? ["major", "minor", "patch"].includes(requestedValue)
+      ? bumpVersion(currentVersion, requestedValue)
+      : requestedValue
+    : undefined;
   const newVersion = requestedVersion || (await promptForVersion(currentVersion));
 
   if (requestedVersion) {

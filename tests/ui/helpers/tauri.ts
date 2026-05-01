@@ -51,11 +51,26 @@ type MockOptions = {
   previewResponse?: MockPreview;
 };
 
+const sampleProjects = [
+  "Alpha Project",
+  "Jot",
+  "Omega / Final",
+  "Project 007",
+  "QP Regression: Close Button",
+  "Sous Chef",
+  "Test 5",
+  "UX – Very Long Project Name For Overflow Checks",
+  "_Internal Tools",
+  "zebra-end",
+  "Ægir Analytics",
+  "Ångström Ops",
+];
+
 const defaultState: MockProjectState = {
   app_version: "2.1.0",
   active_project: "",
   active_comment: "",
-  projects: ["Jot", "Sous Chef", "Test 5"],
+  projects: sampleProjects,
   adhoc_projects: [],
   update_available: false,
   settings: {
@@ -68,7 +83,7 @@ const defaultState: MockProjectState = {
     quickpanel_opacity: 1,
     project_sort_mode: "manual",
     quickpanel_mode: "normal",
-    project_manual_order: ["Jot", "Sous Chef", "Test 5"],
+    project_manual_order: sampleProjects,
     project_recent_usage: {},
     timesheet_rounding_enabled: false,
   },
@@ -128,64 +143,176 @@ export async function installTauriMocks(
     initialPreviewRequest: MockPreviewRequest | null,
     initialPreviewResponse: MockPreview
   ) => {
-    const clonedState = JSON.parse(JSON.stringify(state));
-    const callbacks = new Map<number, (payload: unknown) => void>();
-    const eventHandlers = new Map<string, number[]>();
-    let callbackId = 1;
-    let eventId = 1;
-    let previewRequest = initialPreviewRequest;
-    const previewResponse = initialPreviewResponse;
-    let recentCounter = Math.max(
-      0,
-      ...Object.values(clonedState.settings.project_recent_usage || {})
-    );
+    const params = new URLSearchParams(window.location.search);
+    const queryWindowLabel = params.get("mockWindowLabel");
+    const queryPreviewRange = params.get("mockPreviewRange") as MockPreviewRequest["range"] | null;
+    const queryPreviewFormat = params.get("mockPreviewFormat") as MockPreviewRequest["format"] | null;
+    const queryPreviewScenario = params.get("mockPreviewScenario");
 
-    function emitEvent(event: string, payload?: unknown) {
-      const handlers = eventHandlers.get(event) || [];
-      for (const id of handlers) {
-        const callback = callbacks.get(id);
-        callback?.({ event, id: eventId++, payload });
+    if (queryWindowLabel) {
+      currentWindowLabel = queryWindowLabel;
+    }
+
+    if (queryPreviewRange && queryPreviewFormat) {
+      initialPreviewRequest = {
+        range: queryPreviewRange,
+        format: queryPreviewFormat,
+      };
+
+      initialPreviewResponse =
+        queryPreviewScenario === "banding"
+          ? {
+              title: "Full timesheet",
+              generated_at: "2026-04-30 07:09",
+              generated_at_epoch_ms: Date.UTC(2026, 3, 30, 5, 9, 0),
+              sheets: [
+                {
+                  name: "2026-18",
+                  columns: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+                  rows: [
+                    {
+                      label: "Alpha",
+                      values: [1, 0, 0, 0, 0, 0, 0],
+                      total: 1,
+                      is_comment: false,
+                      is_total: false,
+                    },
+                    {
+                      label: "  - Prep",
+                      values: [1, 0, 0, 0, 0, 0, 0],
+                      total: 1,
+                      is_comment: true,
+                      is_total: false,
+                    },
+                    {
+                      label: "Beta",
+                      values: [0, 2, 0, 0, 0, 0, 0],
+                      total: 2,
+                      is_comment: false,
+                      is_total: false,
+                    },
+                    {
+                      label: "Total",
+                      values: [1, 2, 0, 0, 0, 0, 0],
+                      total: 3,
+                      is_comment: false,
+                      is_total: true,
+                    },
+                  ],
+                },
+              ],
+            }
+          : {
+              title: queryPreviewFormat === "recent" ? "Yesterday + today overview" : "Full timesheet",
+              generated_at: "2026-04-30 07:09",
+              generated_at_epoch_ms: Date.UTC(2026, 3, 30, 5, 9, 0),
+              sheets: [
+                {
+                  name: "2026-18",
+                  columns: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+                  rows: [
+                    {
+                      label: "Alpha",
+                      values: [1, 0, 0, 0, 0, 0, 0],
+                      total: 1,
+                      is_comment: false,
+                      is_total: false,
+                    },
+                    {
+                      label: "Total",
+                      values: [1, 0, 0, 0, 0, 0, 0],
+                      total: 1,
+                      is_comment: false,
+                      is_total: true,
+                    },
+                  ],
+                },
+              ],
+            };
+    }
+
+    const baseState = JSON.parse(JSON.stringify(state)) as MockProjectState;
+
+    const setupMocks = (
+      nextState: Partial<MockProjectState> | undefined,
+      nextWindowLabel: string,
+      nextPreviewRequest: MockPreviewRequest | null,
+      nextPreviewResponse: MockPreview
+    ) => {
+      const clonedState = JSON.parse(
+        JSON.stringify({
+          ...baseState,
+          ...nextState,
+          settings: {
+            ...baseState.settings,
+            ...nextState?.settings,
+            project_manual_order:
+              nextState?.settings?.project_manual_order ?? baseState.settings.project_manual_order,
+            project_recent_usage:
+              nextState?.settings?.project_recent_usage ?? baseState.settings.project_recent_usage,
+          },
+        })
+      ) as MockProjectState;
+      const callbacks = new Map<number, (payload: unknown) => void>();
+      const eventHandlers = new Map<string, number[]>();
+      const invokedCommands: string[] = [];
+      let callbackId = 1;
+      let eventId = 1;
+      let previewRequest = nextPreviewRequest;
+      const previewResponse = nextPreviewResponse;
+      let recentCounter = Math.max(
+        0,
+        ...Object.values(clonedState.settings.project_recent_usage || {})
+      );
+
+      function emitEvent(event: string, payload?: unknown) {
+        const handlers = eventHandlers.get(event) || [];
+        for (const id of handlers) {
+          const callback = callbacks.get(id);
+          callback?.({ event, id: eventId++, payload });
+        }
       }
-    }
 
-    function nextRecentStamp() {
-      recentCounter += 1;
-      return recentCounter;
-    }
-
-    function handleSelectProject(project: string) {
-      if (clonedState.active_project === project) {
-        clonedState.active_project = "";
-      } else {
-        clonedState.active_project = project;
-        clonedState.settings.project_recent_usage[project] = nextRecentStamp();
+      function nextRecentStamp() {
+        recentCounter += 1;
+        return recentCounter;
       }
-      clonedState.active_comment = "";
-    }
 
-    (window as Window & {
-      __TAURI_INTERNALS__?: Record<string, unknown>;
-      __TAURI_EVENT_PLUGIN_INTERNALS__?: Record<string, unknown>;
-    }).__TAURI_INTERNALS__ = {
-      metadata: {
-        currentWindow: { label: currentWindowLabel },
-        currentWebview: { label: currentWindowLabel, windowLabel: currentWindowLabel },
-      },
-      convertFileSrc: (path: string) => path,
-      transformCallback: (fn: (payload: unknown) => void) => {
-        const id = callbackId++;
-        callbacks.set(id, fn);
-        return id;
-      },
-      unregisterCallback: (id: number) => {
-        callbacks.delete(id);
-      },
-      runCallback: (id: number, payload: unknown) => {
-        callbacks.get(id)?.(payload);
-      },
-      callbacks,
-      invoke: async (cmd: string, args: Record<string, unknown> = {}) => {
-        switch (cmd) {
+      function handleSelectProject(project: string) {
+        if (clonedState.active_project === project) {
+          clonedState.active_project = "";
+        } else {
+          clonedState.active_project = project;
+          clonedState.settings.project_recent_usage[project] = nextRecentStamp();
+        }
+        clonedState.active_comment = "";
+      }
+
+      (window as Window & {
+        __TAURI_INTERNALS__?: Record<string, unknown>;
+        __TAURI_EVENT_PLUGIN_INTERNALS__?: Record<string, unknown>;
+        __TAURI_MOCK__?: Record<string, unknown>;
+      }).__TAURI_INTERNALS__ = {
+        metadata: {
+          currentWindow: { label: nextWindowLabel },
+          currentWebview: { label: nextWindowLabel, windowLabel: nextWindowLabel },
+        },
+        convertFileSrc: (path: string) => path,
+        transformCallback: (fn: (payload: unknown) => void) => {
+          const id = callbackId++;
+          callbacks.set(id, fn);
+          return id;
+        },
+        unregisterCallback: (id: number) => {
+          callbacks.delete(id);
+        },
+        runCallback: (id: number, payload: unknown) => {
+          callbacks.get(id)?.(payload);
+        },
+        callbacks,
+        invoke: async (cmd: string, args: Record<string, unknown> = {}) => {
+          invokedCommands.push(cmd);
+          switch (cmd) {
           case "get_state":
             return JSON.parse(JSON.stringify(clonedState));
           case "get_timesheet_preview_bootstrap":
@@ -252,6 +379,7 @@ export async function installTauriMocks(
           case "save_quickpanel_bounds":
           case "set_update_available":
           case "log_from_frontend":
+          case "hide_timesheet_preview_window":
           case "generate_timesheet_export":
           case "reset_timesheet":
           case "reset_projects":
@@ -293,7 +421,7 @@ export async function installTauriMocks(
           case "plugin:event|emit":
             emitEvent(String(args.event ?? ""), args.payload);
             return null;
-          case "plugin:window|set_min_size":
+          case "plugin:window|set_size_constraints":
           case "plugin:window|set_size":
           case "plugin:window|set_position":
           case "plugin:window|set_always_on_top":
@@ -305,29 +433,42 @@ export async function installTauriMocks(
             return null;
           case "plugin:window|outer_size":
             return { width: 430, height: 650 };
+          case "plugin:window|scale_factor":
+            return 1;
           case "plugin:window|outer_position":
             return { x: 100, y: 100 };
           case "plugin:window|available_monitors":
             return [];
           case "plugin:window|primary_monitor":
             return null;
-          default:
-            return null;
-        }
-      },
+            default:
+              return null;
+          }
+        },
+      };
+
+      (window as Window & {
+        __TAURI_EVENT_PLUGIN_INTERNALS__?: Record<string, unknown>;
+        __TAURI_MOCK__?: Record<string, unknown>;
+      }).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+        unregisterListener: (event: string, id: number) => {
+          const list = eventHandlers.get(event) ?? [];
+          eventHandlers.set(
+            event,
+            list.filter((handlerId) => handlerId !== id)
+          );
+        },
+      };
+
+      (window as Window & {
+        __TAURI_MOCK__?: Record<string, unknown>;
+      }).__TAURI_MOCK__ = {
+        invokedCommands,
+        setupMocks,
+      };
     };
 
-    (window as Window & {
-      __TAURI_EVENT_PLUGIN_INTERNALS__?: Record<string, unknown>;
-    }).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
-      unregisterListener: (event: string, id: number) => {
-        const list = eventHandlers.get(event) ?? [];
-        eventHandlers.set(
-          event,
-          list.filter((handlerId) => handlerId !== id)
-        );
-      },
-    };
+    setupMocks(state, currentWindowLabel, initialPreviewRequest, initialPreviewResponse);
   },
   mergedState,
   options?.currentWindowLabel ?? "main",

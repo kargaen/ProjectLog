@@ -2,15 +2,15 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "ProjectLog: Save WIP",
+      "label": "ProjectLog: Push WIP",
       "type": "shell",
       "command": "powershell",
       "args": [
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
-        "-File",
-        "${workspaceFolder}/scripts/save-wip.ps1"
+        "-Command",
+        "git add -A; git commit -m 'WIP'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -23,7 +23,24 @@
       "problemMatcher": []
     },
     {
-      "label": "ProjectLog: Save + New Version",
+      "label": "ProjectLog: Pull WIP",
+      "type": "shell",
+      "command": "git",
+      "args": [
+        "pull"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ProjectLog: Release",
       "type": "shell",
       "command": "node",
       "args": [
@@ -49,6 +66,48 @@
         "Bypass",
         "-Command",
         "cargo test --manifest-path src-tauri/Cargo.toml; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm.cmd run test:ui"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ProjectLog: Run UI Tests (Headed)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "npm.cmd run test:ui -- --headed"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ProjectLog: Run UI Tests (Debug Step)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "$env:PWDEBUG='0'; $env:PW_STEP_DELAY_MS='1200'; npm.cmd run test:ui -- --headed"
       ],
       "options": {
         "cwd": "${workspaceFolder}"

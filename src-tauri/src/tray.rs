@@ -4,6 +4,7 @@ use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 
+use crate::controllers::{project_controller, timesheet_controller};
 use crate::{log, log_debug, log_warn};
 use crate::{logger, projects, AppState};
 
@@ -402,7 +403,7 @@ fn remember_project_use(app: &AppHandle, project: &str) {
 
     let state = app.state::<AppState>();
     let mut settings = state.settings.lock().unwrap();
-    let timestamp = crate::next_recent_usage_timestamp(&settings);
+    let timestamp = project_controller::next_recent_usage_timestamp(&settings);
     settings
         .project_recent_usage
         .insert(project.to_string(), timestamp);
@@ -481,7 +482,11 @@ fn handle_generate(app: &AppHandle, mode: &str) {
         "recent" => ("today", "recent"),
         _ => return,
     };
-    let _ = crate::open_timesheet_preview_window(range.to_string(), format.to_string(), app.clone());
+    let _ = timesheet_controller::open_timesheet_preview_window(
+        range.to_string(),
+        format.to_string(),
+        app,
+    );
 }
 
 fn handle_reset_sheet(app: &AppHandle) {
