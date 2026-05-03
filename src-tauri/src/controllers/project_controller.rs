@@ -183,3 +183,13 @@ pub fn remove_project(project: String, state: &AppState, app: &AppHandle) {
     tray::rebuild_menu(app);
     emit_state_changed(app);
 }
+
+pub fn reset_projects(state: &AppState, app: &AppHandle) {
+    crate::log_warn!("reset_projects");
+    let mut projs = state.projects.lock().unwrap();
+    projs.clear();
+    projects::save(&state.data_dir, &projs);
+    drop(projs);
+    tray::rebuild_menu(app);
+    emit_state_changed(app);
+}

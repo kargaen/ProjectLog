@@ -4,6 +4,7 @@ mod commands {
     pub mod settings_commands;
     pub mod timesheet_commands;
 }
+mod app_setup;
 mod controllers {
     pub mod project_controller;
     pub mod shell_controller;
@@ -11,86 +12,18 @@ mod controllers {
     pub mod timesheet_controller;
 }
 pub mod diagnostics;
+mod lifecycle;
 mod logger;
 mod projects;
 mod settings;
+mod state;
 mod timesheet;
 mod tray;
-use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
-use serde::Serialize;
-use settings::UiSettings;
-use tauri::{Emitter, Manager};
+mod tray_menu;
 
-pub struct AppState {
-    pub active_project: Mutex<String>,
-    pub active_comment: Mutex<String>,
-    pub projects: Mutex<Vec<String>>,
-    pub adhoc_projects: Mutex<Vec<String>>,
-    pub data_dir: PathBuf,
-    pub reminder_active: Arc<AtomicBool>,
-    pub update_available: AtomicBool,
-    pub settings: Mutex<UiSettings>,
-    timesheet_preview_request: Mutex<Option<TimesheetPreviewRequest>>,
-}
+pub use state::{AppState, ProjectLogState, TimesheetPreviewBootstrap, TimesheetPreviewRequest};
+pub(crate) use state::emit_state_changed;
 
-#[derive(Serialize)]
-struct ProjectLogState {
-    app_version: String,
-    active_project: String,
-    active_comment: String,
-    projects: Vec<String>,
-    adhoc_projects: Vec<String>,
-    update_available: bool,
-    settings: UiSettings,
-}
-
-#[derive(Clone, Serialize)]
-struct TimesheetPreviewRequest {
-    range: String,
-    format: String,
-}
-
-#[derive(Serialize)]
-struct TimesheetPreviewBootstrap {
-    request: Option<TimesheetPreviewRequest>,
-    rounding_enabled: bool,
-}
-
-pub(crate) fn emit_state_changed(app: &tauri::AppHandle) {
-    let _ = app.emit("state-changed", ());
-}
-
-fn migrate_legacy_file(data_dir: &PathBuf, filename: &str) {
-    let target = data_dir.join(filename);
-    if target.exists() {
-        return;
-    }
-
-    let mut candidates = Vec::new();
-    if let Ok(current_dir) = std::env::current_dir() {
-        candidates.push(current_dir.join(filename));
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            candidates.push(exe_dir.join(filename));
-        }
-    }
-
-    for source in candidates {
-        if source.exists() && source != target {
-            let _ = std::fs::copy(source, &target);
-            break;
-        }
-    }
-}
-
-fn migrate_legacy_files(data_dir: &PathBuf) {
-    migrate_legacy_file(data_dir, "projects.dat");
-    migrate_legacy_file(data_dir, "log.dat");
-}
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -102,55 +35,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        .setup(|app| {
-            let data_dir = app.path().app_data_dir()?;
-            std::fs::create_dir_all(&data_dir)?;
-            diagnostics::init(&data_dir);
-            log!("setup data_dir={}", data_dir.display());
-            migrate_legacy_files(&data_dir);
-
-            let project_list = projects::load(&data_dir);
-            let ui_settings = settings::load(&data_dir);
-            let reminder_active = Arc::new(AtomicBool::new(true));
-            let reminder_clone = reminder_active.clone();
-
-            let state = AppState {
-                active_project: Mutex::new(String::new()),
-                active_comment: Mutex::new(String::new()),
-                projects: Mutex::new(project_list),
-                adhoc_projects: Mutex::new(Vec::new()),
-                data_dir: data_dir.clone(),
-                reminder_active,
-                update_available: AtomicBool::new(false),
-                settings: Mutex::new(ui_settings),
-                timesheet_preview_request: Mutex::new(None),
-            };
-            app.manage(state);
-
-            logger::log_new_entry(&data_dir, "", "");
-            log!("startup entry written");
-            tray::setup(app)?;
-            log!("tray initialized");
-
-            use tauri_plugin_autostart::ManagerExt;
-            let _ = app.autolaunch().enable();
-
-            let handle = app.handle().clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(300));
-                if reminder_clone.load(Ordering::Relaxed) {
-                    use tauri_plugin_notification::NotificationExt;
-                    let _ = handle
-                        .notification()
-                        .builder()
-                        .title("Activate project...")
-                        .body("Remember to activate a project if you are working.")
-                        .show();
-                }
-            });
-
-            Ok(())
-        })
+        .setup(app_setup::initialize)
         .invoke_handler(tauri::generate_handler![
             commands::project_commands::submit_input,
             commands::project_commands::get_state,
@@ -180,36 +65,16 @@ pub fn run() {
             commands::settings_commands::save_quickpanel_bounds,
             commands::shell_commands::log_from_frontend
         ])
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
-                    api.prevent_close();
-                    let _ = window.hide();
-                } else if window.label() == "timesheet-preview" {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
-            }
-        })
+        .on_window_event(lifecycle::handle_window_event)
         .build(tauri::generate_context!())
         .expect("error building application")
-        .run(|app, event| match &event {
-            tauri::RunEvent::ExitRequested { code, api, .. } => {
-                if code.is_none() {
-                    api.prevent_exit();
-                }
-            }
-            tauri::RunEvent::Exit => {
-                let state = app.state::<AppState>();
-                logger::log_new_entry(&state.data_dir, "", "");
-            }
-            _ => {}
-        });
+        .run(|app, event| lifecycle::handle_run_event(app, &event));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::UiSettings;
     use crate::timesheet::{TimesheetFormat, TimesheetOptions, TimesheetRange};
     use std::collections::HashMap;
 

@@ -1,6 +1,9 @@
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager};
 
-use crate::{logger, timesheet, AppState, TimesheetPreviewBootstrap, TimesheetPreviewRequest};
+use crate::{
+    controllers::shell_controller, logger, timesheet, AppState, TimesheetPreviewBootstrap,
+    TimesheetPreviewRequest,
+};
 use timesheet::{TimesheetFormat, TimesheetOptions, TimesheetPreview, TimesheetRange};
 
 pub fn parse_timesheet_options(range: &str, format: &str) -> Result<TimesheetOptions, String> {
@@ -63,53 +66,18 @@ pub async fn open_timesheet_preview_window(
         TimesheetFormat::Full => (1120.0, 760.0),
     };
 
-    *app.state::<AppState>().timesheet_preview_request.lock().unwrap() = Some(TimesheetPreviewRequest {
+    let request = TimesheetPreviewRequest {
         range: range.clone(),
         format: format.clone(),
-    });
+    };
 
-    if let Some(window) = app.get_webview_window("timesheet-preview") {
-        let _ = window.set_title(title);
-        let _ = window.set_size(LogicalSize::new(width, height));
-        let _ = window.emit(
-            "show-timesheet-preview",
-            TimesheetPreviewRequest {
-                range: range.clone(),
-                format: format.clone(),
-            },
-        );
-        let _ = window.show();
-        let _ = window.set_focus();
-        return Ok(());
-    }
+    *app.state::<AppState>().timesheet_preview_request.lock().unwrap() = Some(request.clone());
 
-    let config = app
-        .config()
-        .app
-        .windows
-        .iter()
-        .find(|window| window.label == "timesheet-preview")
-        .ok_or_else(|| "Missing timesheet-preview window config.".to_string())?;
-
-    let window = WebviewWindowBuilder::from_config(app, config)
-        .map_err(|e| e.to_string())?
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let _ = window.set_title(title);
-    let _ = window.set_size(LogicalSize::new(width, height));
-    let _ = window.show();
-    let _ = window.set_focus();
-
-    Ok(())
+    shell_controller::show_timesheet_preview_window(app, request, title, width, height)
 }
 
 pub fn hide_timesheet_preview_window(app: &AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("timesheet-preview") {
-        window.hide().map_err(|e| e.to_string())?;
-    }
-
-    Ok(())
+    shell_controller::hide_timesheet_preview_window(app)
 }
 
 pub fn generate_timesheet_export(

@@ -1,20 +1,17 @@
-
 ---
-
 ## Mission
 
 See [`README.md`](./README.md) for the full mission statement and product overview.
-
 ---
 
 ## Architecture Philosophy
 
 ProjectLog uses a strict three-layer MVC split, adapted to the idioms of **Svelte on the frontend** and **Tauri + Rust on the native side**:
 
-| Layer | Where it lives | Responsibility |
-|---|---|---|
-| **Model** | `src/models/` and `src-tauri/src/models/` | Shape of data — TypeScript/Rust domain types, validation, persistence abstractions, repository contracts |
-| **View** | `src/views/` | Pure presentation — Svelte components that receive state and callbacks, with no business decisions |
+| Layer          | Where it lives                                      | Responsibility                                                                                             |
+| -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Model**      | `src/models/` and `src-tauri/src/models/`           | Shape of data — TypeScript/Rust domain types, validation, persistence abstractions, repository contracts   |
+| **View**       | `src/views/`                                        | Pure presentation — Svelte components that receive state and callbacks, with no business decisions         |
 | **Controller** | `src/controllers/` and `src-tauri/src/controllers/` | Business logic — orchestrates models, drives UI state, coordinates native commands, and enforces workflows |
 
 Because ProjectLog is a desktop app with a frontend/backend split, MVC applies on **both sides**:
@@ -28,22 +25,22 @@ The boundary between them is explicit:
 - **Views** never call Tauri commands directly
 - **Rust commands** are transport endpoints only; they delegate immediately to native controllers/services
 
-This architecture is intentionally self-documenting. A developer should be able to infer *what belongs where* from folder names alone.
+This architecture is intentionally self-documenting. A developer should be able to infer _what belongs where_ from folder names alone.
 
 ---
 
 ## Stack
 
-| Concern | Choice | Notes |
-|---|---|---|
-| Desktop shell | Tauri v2 | Lightweight desktop app shell with native windowing, tray, autostart, updater support |
-| Frontend UI | Svelte 5 | Reactive UI with clear component composition and low boilerplate |
-| Frontend language | TypeScript | Strict typing for models, controller APIs, and bridge contracts |
-| Build tool | Vite | Fast frontend build and local development |
-| Native language | Rust | Reliable filesystem access, structured domain logic, and desktop integration |
-| Testing | Playwright + Cargo tests | UI regression coverage plus Rust unit/integration tests |
-| Packaging / updates | Tauri updater | App updates remain separate from domain logic |
-| Persistence | Local files / native storage | Local-first storage for projects, logs, settings, and generated timesheet data |
+| Concern             | Choice                       | Notes                                                                                 |
+| ------------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
+| Desktop shell       | Tauri v2                     | Lightweight desktop app shell with native windowing, tray, autostart, updater support |
+| Frontend UI         | Svelte 5                     | Reactive UI with clear component composition and low boilerplate                      |
+| Frontend language   | TypeScript                   | Strict typing for models, controller APIs, and bridge contracts                       |
+| Build tool          | Vite                         | Fast frontend build and local development                                             |
+| Native language     | Rust                         | Reliable filesystem access, structured domain logic, and desktop integration          |
+| Testing             | Playwright + Cargo tests     | UI regression coverage plus Rust unit/integration tests                               |
+| Packaging / updates | Tauri updater                | App updates remain separate from domain logic                                         |
+| Persistence         | Local files / native storage | Local-first storage for projects, logs, settings, and generated timesheet data        |
 
 ---
 
@@ -65,7 +62,9 @@ The architecture must optimize for the actual purpose of the product:
 ProjectLog presents two interaction surfaces over the same underlying domain:
 
 ### QuickPanel
+
 A floating Tauri window that gives the user full access to all features. It contains:
+
 - A project list with sort modes (Manual, A-Z, Recent) and drag-to-reorder
 - A comment field that attaches context to the active session
 - Add project and Quick track (ad-hoc) inputs
@@ -73,7 +72,9 @@ A floating Tauri window that gives the user full access to all features. It cont
 - Settings: Always on top, Open on start, Opacity, Compact mode
 
 ### System Tray
+
 A native Windows system tray menu that mirrors the core QuickPanel actions without requiring the window to be open:
+
 - Project list for direct activation
 - Set comment
 - Add project / Quick project / Remove project
@@ -154,6 +155,7 @@ ProjectLog is organized around six stable business domains.
 ### 1. Project Domain
 
 Responsible for:
+
 - permanent projects
 - ad-hoc / quick projects
 - manual ordering
@@ -163,6 +165,7 @@ Responsible for:
 ### 2. Session / Log Domain
 
 Responsible for:
+
 - active project state (which project is currently being tracked)
 - start/stop transitions and timestamp recording
 - comment attachment to the active session block
@@ -172,6 +175,7 @@ Responsible for:
 ### 3. Timesheet Domain
 
 Responsible for:
+
 - aggregating log entries into per-project daily hour totals
 - producing a weekly table (Mon–Sun columns, project rows, comment sub-rows)
 - range selection: full history, this week, yesterday + today
@@ -184,6 +188,7 @@ This domain is core to the product mission. The timesheet output is the primary 
 ### 4. Settings Domain
 
 Responsible for:
+
 - always-on-top window behavior
 - open QuickPanel on system start
 - QuickPanel opacity (0–100%)
@@ -194,6 +199,7 @@ Responsible for:
 ### 5. Desktop Shell Domain
 
 Responsible for:
+
 - system tray menu construction and state
 - tray menu item enabling/disabling based on active session
 - window visibility, focus, and placement
@@ -204,6 +210,7 @@ Responsible for:
 ### 6. Diagnostics Domain
 
 Responsible for:
+
 - structured diagnostic log for troubleshooting
 - app health inspection (storage paths, file integrity, version)
 - debug-safe support output
@@ -426,24 +433,36 @@ This separation ensures that "generate daily project hour insight" is treated as
 
 ### File Naming
 
-| Artefact | Convention | Example |
-|---|---|---|
-| Svelte view component | `Name.view.svelte` | `ProjectRow.view.svelte` |
-| Screen | `NameScreen.svelte` | `TimesheetScreen.svelte` |
-| Frontend controller | `createXController.ts` | `createTimesheetController.ts` |
-| Bridge service | `xBridge.ts` | `timesheetBridge.ts` |
-| Store | `xStore.ts` | `projectStore.ts` |
-| Rust controller | `x_controller.rs` | `timesheet_controller.rs` |
-| Repository trait | `x_repository.rs` | `log_repository.rs` |
-| Concrete repository | `file_x_repository.rs` | `file_log_repository.rs` |
-| Domain model | `x.rs` | `log_entry.rs` |
-| DTO | `x_dto.rs` | `timesheet_dto.rs` |
-| Tauri commands | `x_commands.rs` | `settings_commands.rs` |
-| Validation schema | `NameSchema.ts` | `SettingsSchema.ts` |
+| Artefact              | Convention             | Example                        |
+| --------------------- | ---------------------- | ------------------------------ |
+| Svelte view component | `Name.view.svelte`     | `ProjectRow.view.svelte`       |
+| Screen                | `NameScreen.svelte`    | `TimesheetScreen.svelte`       |
+| Frontend controller   | `createXController.ts` | `createTimesheetController.ts` |
+| Bridge service        | `xBridge.ts`           | `timesheetBridge.ts`           |
+| Store                 | `xStore.ts`            | `projectStore.ts`              |
+| Rust controller       | `x_controller.rs`      | `timesheet_controller.rs`      |
+| Repository trait      | `x_repository.rs`      | `log_repository.rs`            |
+| Concrete repository   | `file_x_repository.rs` | `file_log_repository.rs`       |
+| Domain model          | `x.rs`                 | `log_entry.rs`                 |
+| DTO                   | `x_dto.rs`             | `timesheet_dto.rs`             |
+| Tauri commands        | `x_commands.rs`        | `settings_commands.rs`         |
+| Validation schema     | `NameSchema.ts`        | `SettingsSchema.ts`            |
+
+### Commenting Practice
+
+Prefer self-explanatory code over explanatory comments. Add comments only where they provide context the code itself cannot express quickly, such as architectural intent, non-obvious constraints, workflow invariants, edge-case reasoning, or why a particular approach was chosen. Do not add comments that merely restate what the next line of code already says. A small number of high-value comments is preferred over pervasive low-signal commentary.
+
+- Comment `why`, not `what`.
+- Comment invariants, assumptions, and surprising behavior.
+- Comment cross-layer or cross-domain decisions that would be hard to infer locally.
+- Avoid line-by-line narration of obvious code.
+- If a function needs many explanatory comments, prefer refactoring it into clearer names and smaller units first.
+
+Comments should reduce future confusion, not decorate code.
 
 ### Dependency Rule
 
-Each layer may only import from layers *below* it. Violations are treated as bugs.
+Each layer may only import from layers _below_ it. Violations are treated as bugs.
 
 #### Frontend
 
@@ -499,7 +518,15 @@ export function createProjectListController(deps: {
     }
   }
 
-  return { selectProject, get loading() { return loading; }, get error() { return error; } };
+  return {
+    selectProject,
+    get loading() {
+      return loading;
+    },
+    get error() {
+      return error;
+    },
+  };
 }
 ```
 
@@ -570,7 +597,7 @@ SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
 
 ### View Pattern
 
-Views receive already-prepared state and emit intent callbacks. A view may know *what to show*, but never *what the business rules are*.
+Views receive already-prepared state and emit intent callbacks. A view may know _what to show_, but never _what the business rules are_.
 
 ```svelte
 <!-- src/views/components/projects/ProjectRow.view.svelte -->
@@ -608,17 +635,17 @@ If a file cannot be placed confidently, that usually indicates the responsibilit
 
 The MVC split makes each layer independently testable with small, focused mocks.
 
-| Layer | What to test | Mock boundary |
-|---|---|---|
-| Frontend `models/schemas` | Payload parsing and invalid-state rejection | None needed |
-| Frontend controllers | Async state, command sequencing, error handling | Mock bridge services |
-| Frontend views | Render behavior, callbacks, keyboard and input flows | Mock controllers / props |
-| Bridge services | Command/event normalization | Mock `invoke` / event APIs |
-| Native controllers | Domain workflows and rule enforcement | Mock repositories and services |
-| Native repositories | File/storage behavior and data mapping | Mock filesystem / infrastructure |
-| `timesheet_service` | Hour aggregation, rounding, comment grouping, range logic | Mock repositories or clocks |
-| `migration_service` | Legacy format detection, upgrade correctness | Mock filesystem |
-| End-to-end | Real desktop behavior across both surfaces | Playwright |
+| Layer                     | What to test                                              | Mock boundary                    |
+| ------------------------- | --------------------------------------------------------- | -------------------------------- |
+| Frontend `models/schemas` | Payload parsing and invalid-state rejection               | None needed                      |
+| Frontend controllers      | Async state, command sequencing, error handling           | Mock bridge services             |
+| Frontend views            | Render behavior, callbacks, keyboard and input flows      | Mock controllers / props         |
+| Bridge services           | Command/event normalization                               | Mock `invoke` / event APIs       |
+| Native controllers        | Domain workflows and rule enforcement                     | Mock repositories and services   |
+| Native repositories       | File/storage behavior and data mapping                    | Mock filesystem / infrastructure |
+| `timesheet_service`       | Hour aggregation, rounding, comment grouping, range logic | Mock repositories or clocks      |
+| `migration_service`       | Legacy format detection, upgrade correctness              | Mock filesystem                  |
+| End-to-end                | Real desktop behavior across both surfaces                | Playwright                       |
 
 **Critical regression paths for ProjectLog:**
 

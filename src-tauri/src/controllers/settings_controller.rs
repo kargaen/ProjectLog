@@ -92,3 +92,20 @@ pub fn save_quickpanel_bounds(x: f64, y: f64, width: f64, height: f64, state: &A
     settings.quickpanel_height = Some(height);
     settings::save(&state.data_dir, &settings);
 }
+
+pub fn set_quickpanel_mode(mode: &str, state: &AppState, app: &AppHandle) {
+    if mode != "normal" && mode != "compact" {
+        return;
+    }
+
+    let mut settings = state.settings.lock().unwrap();
+    if settings.quickpanel_mode == mode {
+        return;
+    }
+
+    settings.quickpanel_mode = mode.to_string();
+    settings::save(&state.data_dir, &settings);
+    drop(settings);
+    tray::rebuild_menu(app);
+    emit_state_changed(app);
+}

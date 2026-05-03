@@ -40,11 +40,5 @@ pub fn remove_project(project: String, state: State<AppState>, app: tauri::AppHa
 
 #[tauri::command]
 pub fn reset_projects(state: State<AppState>, app: tauri::AppHandle) {
-    crate::log_warn!("reset_projects");
-    let mut projs = state.projects.lock().unwrap();
-    projs.clear();
-    crate::projects::save(&state.data_dir, &projs);
-    drop(projs);
-    crate::tray::rebuild_menu(&app);
-    crate::emit_state_changed(&app);
+    project_controller::reset_projects(&state, &app);
 }

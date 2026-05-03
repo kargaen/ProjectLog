@@ -1,332 +1,186 @@
-# Refactor Summary
+# Refactor Work Breakdown Structure
 
-## Outcome
+## Purpose
 
-The refactor moved ProjectLog meaningfully closer to the intended MVC architecture without forcing a risky full rewrite.
+This document is the execution checklist for finishing the ProjectLog refactor.
 
-The codebase now has clearer architectural boundaries on both the native and frontend sides, stronger documentation, better workflow support, and a more useful automated test baseline. The app remains functional, and the current state is good enough to resume from later without having to reconstruct why changes were made.
+It replaces narrative progress notes with a complete work-breakdown structure. When every item in this file is done, the refactor is done.
 
-## What was completed
+---
 
-### 1. Product and architecture documentation was clarified
+## Done Rule
 
-- Added a focused `README.md` with the mission statement and product framing.
-- Reworked `ARCHITECTURE.md` into the current strong source of truth for:
-  - strict MVC thinking
-  - "Two Surfaces, One Domain"
-  - self-documenting folder structure
-  - domain boundaries and transport rules
-- Added `WORKFLOWS.md` as a reusable workflow template for tasks, versioning, release flow, WIP flow, tests, and CI/CD thinking.
+The refactor is complete when:
 
-This gives the project a much stronger foundation for future refactor work.
+- every major responsibility lives in the layer described by `ARCHITECTURE.md`
+- no root file, tray handler, Tauri command, or Svelte view is acting like a hidden controller
+- duplicated logic across surfaces and layers has been removed or intentionally centralized
+- native and frontend workflows are still covered by the appropriate tests
 
-### 2. Native-side MVC extraction started successfully
+---
 
-The Rust/Tauri backend was split into more explicit command and controller responsibilities.
+## Completion Checklist
 
-New command modules were introduced under `src-tauri/src/commands/`:
+### 1. Native Composition Root
 
-- `project_commands.rs`
-- `settings_commands.rs`
-- `shell_commands.rs`
-- `timesheet_commands.rs`
+- [x] `src-tauri/src/lib.rs` is only a composition root.
+- [x] `lib.rs` only wires modules, plugins, commands, lifecycle hooks, and shared state exports.
+- [x] Native setup responsibilities are fully delegated to dedicated setup modules.
+- [x] Native lifecycle responsibilities are fully delegated to dedicated lifecycle modules.
+- [x] No business workflow logic remains inline in `lib.rs`.
 
-New controller modules were introduced under `src-tauri/src/controllers/`:
+### 2. Native State and Shared DTO Boundaries
 
-- `project_controller.rs`
-- `settings_controller.rs`
-- `shell_controller.rs`
-- `timesheet_controller.rs`
+- [x] Shared native app state lives in dedicated state modules.
+- [x] Shared DTO-like structs used across commands/controllers are defined in dedicated locations, not opportunistically inside root files.
+- [x] State fields have clear ownership and are not acting as a dumping ground for unrelated behavior.
+- [x] The native state structure matches the responsibilities described in `ARCHITECTURE.md`.
 
-This is an important architectural step because it reduces pressure on `src-tauri/src/lib.rs` and separates transport concerns from business logic.
+### 3. Native Commands
 
-### 3. `src-tauri/src/lib.rs` became thinner, but is not finished
+- [x] All Tauri commands are thin transport adapters.
+- [x] Commands delegate immediately to controllers or services.
+- [x] Commands do not own persistence, validation, orchestration, or shell logic.
+- [ ] Command naming and file layout match the documented domain structure.
 
-The composition root is improved, but it still carries too much responsibility.
+### 4. Native Controllers
 
-It still appears to own or coordinate too much of the following:
+- [x] Project workflows live in project-oriented controllers.
+- [x] Settings workflows live in settings-oriented controllers.
+- [x] Shell/window/tray-facing workflows live in shell-oriented controllers.
+- [x] Timesheet workflows live in timesheet-oriented controllers.
+- [x] Controllers own workflow decisions, but not raw transport plumbing.
+- [x] Controllers do not duplicate each other’s logic across domains.
 
-- app setup
-- lifecycle wiring
-- some shared app state concerns
-- native registration and orchestration
+### 5. Native Services and Supporting Modules
 
-So the refactor direction is correct, but `lib.rs` is still a partial bottleneck and remains a major follow-up target.
+- [ ] Domain services exist wherever controller logic is still too heavy or too mixed.
+- [x] Shell-specific helpers are separated from project/session/timesheet domain behavior.
+- [x] Window-specific behavior is isolated if it still clutters controllers.
+- [x] Setup/bootstrap helpers are separated from runtime workflow helpers.
+- [ ] Any remaining mixed-responsibility helpers are either split or clearly justified.
 
-### 4. Timesheet logic got better test protection
+### 6. Tray Layer
 
-The timesheet domain received stronger Rust-side verification.
+- [ ] `src-tauri/src/tray.rs` is only an event-adapter layer.
+- [x] Tray menu construction is separate from tray event handling where that improves clarity.
+- [x] Tray handlers delegate quickly to controllers or shell helpers.
+- [x] Tray handlers do not duplicate project, settings, timesheet, or shell workflows.
+- [x] Tray-specific logic is limited to menu wiring, event decoding, and tray-surface concerns.
+- [ ] The tray is no longer effectively a second controller layer.
 
-Notable improvements:
+### 7. Native Domain Separation
 
-- relative-to-now fixture coverage was added for yesterday, today, and multi-week scenarios
-- preview behavior was checked more realistically
-- export-related behavior remained covered
-- a deferred note was recorded that true clock injection should eventually replace relative fixtures for full determinism
+- [x] Project behavior is clearly separate from shell behavior.
+- [x] Session/log behavior is clearly separate from shell behavior.
+- [x] Timesheet behavior is clearly separate from shell behavior.
+- [x] Settings behavior is clearly separate from shell behavior.
+- [x] Diagnostics behavior is clearly separate from project/session/timesheet logic.
+- [x] Cross-domain interactions happen through deliberate controller/service boundaries.
 
-This was the right tradeoff: exact timesheet correctness is better protected in Rust tests than in browser UI tests.
+### 8. Frontend Root and Screen Composition
 
-### 5. Playwright coverage was reshaped into a leaner, higher-value UI suite
+- [ ] `src/App.svelte` is only an app/root composition file.
+- [ ] `src/views/screens/QuickPanelScreen.svelte` is primarily a screen composition layer.
+- [ ] `src/views/screens/TimesheetScreen.svelte` is primarily a screen composition layer.
+- [ ] Screen files do not accumulate controller logic, state orchestration, or native transport behavior.
+- [ ] Remaining heavy screen-level composition is split further if it still obscures responsibilities.
 
-The UI test approach improved substantially.
+### 9. Frontend Controllers
 
-Instead of many shallow checks, the suite now focuses on a smaller number of stronger regression workflows.
+- [ ] Frontend business behavior lives in controllers, not in views.
+- [ ] QuickPanel behavior is split into coherent controller modules with clear ownership.
+- [ ] Timesheet preview behavior is split into coherent controller modules with clear ownership.
+- [ ] Controller modules are organized by domain or responsibility, not by arbitrary convenience.
+- [ ] Controllers own async coordination, derived UI behavior, and bridge usage.
+- [ ] Controllers do not become new monoliths after extraction.
 
-Current coverage includes:
+### 10. Frontend Views
 
-- QuickPanel shell rendering
-- manual project selection workflow
-- A-Z ordering workflow
-- recent-mode workflow
-- core QuickPanel actions
-- full timesheet preview rendering
-- yesterday + today preview rendering
-- preview actions for refresh, rounding, export, and close
+- [ ] Views are passive: props in, callbacks out.
+- [ ] Views do not call Tauri commands directly.
+- [ ] Views do not contain hidden business rules.
+- [ ] View decomposition matches meaningful UI or domain boundaries.
+- [ ] Dialogs, settings sections, update sections, and project sections are split enough that responsibilities are obvious.
+- [ ] The `views/` tree is close enough to the target architecture that file location explains responsibility.
 
-This is a much better baseline for future UI expansion.
+### 11. Frontend Bridge Layer
 
-### 6. UI test data is now isolated from real user data
+- [ ] Bridge modules are the only frontend layer that talks to native commands.
+- [ ] Bridge modules stay transport-focused and do not accumulate business rules.
+- [ ] Bridge boundaries are explicit and easy to follow from controller to native command.
+- [ ] Bridge naming and structure match the domains they serve.
 
-The browser-based Tauri mocks were improved so tests do not depend on whatever the user currently has in their real project list.
+### 12. Frontend State Boundaries
 
-The mocked project list now includes richer stable sample data with:
+- [ ] Shared frontend state boundaries are intentional and stable.
+- [ ] Any remaining broad prop surfaces are simplified or grouped into clearer view-model contracts.
+- [ ] If stores are used, they have clear ownership and do not duplicate controller responsibilities.
+- [ ] If controller-owned state remains the main pattern, that boundary is still clean and maintainable.
+- [ ] No major frontend workflow depends on ad hoc state scattered across screens and views.
 
-- alphabetic edge cases
-- long names
-- special characters
-- ordering edge cases
-- enough variety to expose sorting and selector problems
+### 13. Type and Model Placement
 
-This makes the UI suite more trustworthy during future debugging and refactors.
+- [ ] Shared frontend domain types live in canonical model/type locations.
+- [ ] Shared native domain/state/DTO types live in canonical native locations.
+- [ ] Compatibility re-exports are minimized or intentionally documented.
+- [ ] Types are not stranded in legacy folders that no longer match the architecture.
+- [ ] The folder tree is self-explanatory enough that a new contributor can infer where new code belongs.
 
-### 7. Debugging workflows for UI testing were improved
+### 14. Duplication Removal
 
-Editor tasks were added or refined so Playwright can be run in multiple useful modes:
+- [x] Duplicate workflow logic between tray and commands has been removed.
+- [x] Duplicate workflow logic between tray and controllers has been removed.
+- [ ] Duplicate workflow logic between views and controllers has been removed.
+- [ ] Duplicate workflow logic between screens and child views has been removed where it harms clarity.
+- [x] Duplicate shell/open/file/prompt behavior has been centralized.
+- [ ] Duplicate project/session/timesheet behavior has been centralized.
 
-- normal full test run
-- headed UI run
-- debug-step style run
+### 15. Architecture Alignment
 
-The debug-step flow was further improved so it can pause automatically between meaningful UI actions instead of requiring manual stepping through every action.
+- [ ] The implemented structure materially matches `ARCHITECTURE.md`.
+- [ ] Any intentional deviations from `ARCHITECTURE.md` are small, explicit, and justified.
+- [ ] The codebase communicates responsibilities by structure, not by tribal knowledge.
+- [ ] New work can be placed confidently without reopening architectural uncertainty.
 
-Headless execution remains unaffected and fast.
+### 16. Test Coverage and Verification
 
-### 8. Frontend MVC extraction has now started properly
+- [x] Rust tests still cover timesheet/domain correctness.
+- [ ] Playwright still covers key user workflows.
+- [ ] Native refactor changes that browser tests cannot prove have an explicit verification strategy.
+- [ ] No critical workflow has silently lost coverage during refactor cleanup.
+- [ ] The final refactor checkpoint includes a clean validation run and recorded results.
 
-The frontend is no longer only documented as MVC-adjacent. It now has real controller and bridge seams.
+### 17. Final Cleanup
 
-New frontend structure was introduced:
+- [ ] No known structural warnings remain unresolved.
+- [ ] No major temporary architectural compromises remain untracked.
+- [ ] No “we should move this later” bottlenecks remain in core files without being addressed.
+- [ ] File naming and placement are consistent with project conventions.
+- [ ] The remaining code reads as a maintained architecture, not a half-transition.
 
-- `src/models/types.ts` now owns the shared frontend domain types
-- `src/services/bridge/quickPanelBridge.ts` and `src/services/bridge/timesheetBridge.ts` now own typed Tauri command transport
-- `src/controllers/quickpanel/createQuickPanelController.svelte.ts` now owns QuickPanel state, event wiring, settings persistence, update flow, and project interactions
-- `src/controllers/timesheets/createTimesheetPreviewController.svelte.ts` now owns timesheet preview loading, refresh, rounding, export, and hover state
-- `src/lib/types.ts` now acts as a compatibility re-export instead of remaining the canonical type home
+---
 
-The user-facing screens became meaningfully thinner:
+## Suggested Execution Order
 
-- `src/App.svelte` is now mostly a screen shell that binds state and callbacks from the controller
+Use this order unless a later item becomes blocked on a missing earlier extraction.
 
-This is an important checkpoint because it turns the frontend refactor from an architectural intention into an actual working pattern the rest of the UI can now follow.
+1. Finish native composition-root and tray cleanup.
+2. Finish native controller/service boundary cleanup.
+3. Finish frontend screen and view decomposition.
+4. Finish frontend controller/state boundary cleanup.
+5. Remove remaining duplication and legacy placements.
+6. Reconcile the final structure against `ARCHITECTURE.md`.
+7. Run final validation and close any remaining gaps.
 
-### 9. QuickPanel view extraction is now underway
+---
 
-The frontend refactor is no longer only about moving logic out of Svelte files. The view layer itself has now started to take shape.
+## Tracking Rule
 
-New view-layer structure was introduced:
+Only mark a checkbox complete when:
 
-- `src/views/screens/QuickPanelScreen.svelte` now owns QuickPanel screen composition
-- `src/views/components/quickpanel/QuickPanelHeader.view.svelte`
-- `src/views/components/quickpanel/QuickPanelControls.view.svelte`
-- `src/views/components/quickpanel/CompactModeFooter.view.svelte`
-- `src/views/components/projects/ProjectListPanel.view.svelte`
-- `src/views/components/dialogs/InputDialog.view.svelte`
-- `src/views/components/dialogs/AboutDialog.view.svelte`
-- `src/views/components/dialogs/UpdateDialog.view.svelte`
-- `src/views/screens/quickpanel.css` now centralizes the QuickPanel styling that used to live in `src/App.svelte`
+- the code has actually been changed to satisfy it
+- the resulting structure is stable enough that the responsibility is unlikely to regress
+- any relevant tests or validations for that slice have been run
 
-This changed the role of `src/App.svelte` substantially:
-
-- it is now a small composition/root-routing file rather than the main UI implementation
-- QuickPanel rendering is delegated to a screen-level view
-- the screen itself now composes passive view components instead of keeping every section inline
-
-This is a meaningful architectural gain because the controller/view separation is now visible in the folder structure, not just present in the code flow.
-
-### 10. Timesheet preview now follows the same `views/` architecture
-
-The frontend no longer has one surface using the new architecture and one surface still living in a legacy component file.
-
-New timesheet view-layer structure was introduced:
-
-- `src/views/screens/TimesheetScreen.svelte` now owns timesheet preview screen composition
-- `src/views/components/timesheets/TimesheetHeader.view.svelte`
-- `src/views/components/timesheets/TimesheetTable.view.svelte`
-- `src/views/components/timesheets/TimesheetFooter.view.svelte`
-- `src/views/components/timesheets/TimesheetStatePanel.view.svelte`
-- `src/views/screens/timesheet.css` now owns the timesheet preview styling
-
-This also simplified the remaining app root responsibilities further:
-
-- `src/App.svelte` now routes between QuickPanel and Timesheet screen components
-- the legacy `src/lib/components/TimesheetPreviewWindow.svelte` file was removed
-- the existing timesheet controller was preserved, so this change was mostly structural rather than behavioral
-
-This is another meaningful checkpoint because both major frontend surfaces now use the same controller-to-screen-to-view flow.
-
-### 11. QuickPanel controller responsibilities are now split into real action and state modules
-
-The QuickPanel frontend logic is no longer concentrated in one giant controller file.
-
-New QuickPanel controller-support modules were introduced under `src/controllers/quickpanel/`:
-
-- `createQuickPanelProjectActions.ts`
-- `createQuickPanelSettingsActions.ts`
-- `createQuickPanelDialogActions.ts`
-- `createQuickPanelUpdateActions.ts`
-- `createQuickPanelShellActions.ts`
-- `createQuickPanelStateSync.ts`
-- `quickPanelTypes.ts`
-
-This changed the role of `createQuickPanelController.svelte.ts` in an important way:
-
-- it now behaves much more like a composition/orchestration layer
-- project actions, settings actions, dialog behavior, update flow, and shell/window behavior now live behind clearer module boundaries
-- state loading, ignored-event handling, manual-order syncing, and debounced UI-settings persistence now live in a dedicated state-sync module instead of staying inline in the controller
-
-This is a meaningful follow-up to the earlier frontend MVC extraction because the controller pattern now exists at two levels:
-
-- screens no longer own native command transport directly
-- the main QuickPanel controller itself no longer owns every domain behavior inline
-
-### 12. QuickPanel mount and event wiring now live in a dedicated lifecycle helper
-
-The QuickPanel controller no longer owns all of its mount-time orchestration inline.
-
-Another QuickPanel support module was introduced under `src/controllers/quickpanel/`:
-
-- `createQuickPanelLifecycle.ts`
-
-This changed the controller boundary again in a useful way:
-
-- lifecycle startup, event listeners, bounds persistence polling, and cleanup are now grouped in one dedicated helper
-- dialog prompt mode and close-on-submit behavior are now treated as part of controller state instead of living in loose local variables
-- `createQuickPanelController.svelte.ts` is now much closer to a composition root that wires state sync, actions, shell behavior, update flow, and lifecycle together
-
-This is a good architectural checkpoint because the remaining controller complexity is now much more intentional. What is left in the main controller is mostly dependency wiring and derived view state rather than mixed lifecycle and domain behavior.
-
-## What worked well
-
-- Using architecture documentation as the source of truth before pushing further refactor changes.
-- Moving native logic into controllers without attempting to reorganize everything at once.
-- Extracting frontend controller and bridge layers without destabilizing the existing QuickPanel or timesheet preview behavior.
-- Moving QuickPanel rendering into a real `views/` tree without breaking the existing browser regression suite.
-- Moving the timesheet preview surface into the same `views/` architecture without breaking its existing workflows.
-- Continuing the QuickPanel controller refactor by extracting action and state-sync modules instead of letting the new controller become a second monolith.
-- Continuing that same QuickPanel refactor by extracting lifecycle setup and listener cleanup into a dedicated helper instead of leaving mount-time orchestration inline.
-- Keeping browser tests focused on user-visible workflows instead of overfitting to implementation detail.
-- Using Rust tests for timesheet correctness and Playwright for interaction confidence.
-- Using richer mock data to stabilize UI tests.
-
-## What remains unfinished
-
-### 1. Frontend MVC is still incomplete
-
-The frontend is meaningfully closer to the target architecture described in `ARCHITECTURE.md`, but it is not finished yet.
-
-Most notably:
-
-- `src/App.svelte` is no longer the main frontend bottleneck, and the QuickPanel controller is now much better factored internally, but `src/views/screens/QuickPanelScreen.svelte` still carries a substantial amount of composition and QuickPanel-specific prop wiring
-- `src/views/screens/TimesheetScreen.svelte` is smaller than the old implementation, but it still owns table-level composition and could be split further if that becomes valuable
-- the QuickPanel controller now delegates to action, state-sync, and lifecycle modules, but its derived view state and screen-facing callback surface are still fairly broad
-- passive view components now exist for both major frontend surfaces, but the view tree is still not yet aligned to all of the target domains from `ARCHITECTURE.md`
-- dedicated stores or view-model boundaries are not in place yet, so controller-owned state is still doing most of the coordination work
-- some frontend responsibilities are cleaner than before, but the UI surface is not yet fully decomposed into the documented MVC tree
-
-This remains the next major refactor area, but it is now a continuation problem rather than a greenfield one.
-
-### 2. Native composition and tray behavior likely still need cleanup
-
-Even after controller extraction:
-
-- `src-tauri/src/lib.rs` still appears too central
-- `src-tauri/src/tray.rs` is likely still too smart
-- shell-level coordination probably still needs a cleaner application-service or orchestration layer
-
-### 3. Native-only behavior is not fully covered by browser tests
-
-Playwright is now useful, but it still cannot fully validate:
-
-- true tray behavior
-- real native multi-window interactions
-- OS-level opener integrations
-- actual spawned preview-window behavior from the desktop shell
-
-Deferred comments were added in the test suite to make this explicit.
-
-### 4. Clock determinism is not solved yet
-
-The timesheet tests are stronger, but they still rely on relative fixture strategies instead of full clock injection.
-
-A future deterministic time abstraction would improve confidence and reduce edge-case brittleness.
-
-### 5. Minor cleanup remains
-
-There is still a warning in `src-tauri/src/controllers/shell_controller.rs` for unused imports:
-
-- `Emitter`
-- `Manager`
-
-This is minor, but should be cleaned up later.
-
-## Current validated state
-
-At the end of this phase, the following validation passed:
-
-- Rust tests: `29 passed`
-- Frontend production build: `npm run build`
-- Playwright UI tests: `8 passed`
-
-This means the current checkpoint is stable enough to continue from later, and neither the controller/bridge extraction nor the new QuickPanel and Timesheet view decomposition broke the existing validated workflows. The known Rust warning in `shell_controller.rs` still remains, but it is unchanged from earlier checkpoints.
-
-## Recommended next steps
-
-When work resumes, the most sensible order is:
-
-1. Continue the frontend refactor from the new controller/bridge baseline.
-   - Continue decomposing `src/views/screens/QuickPanelScreen.svelte`
-   - Decide whether QuickPanel update status, dialog rendering, or settings sections should become additional passive screen-level components
-   - Decide whether the broad QuickPanel screen prop surface should be grouped into screen-specific view-model objects or section-level prop contracts
-   - Decide whether QuickPanel subviews should be reorganized further into project/session/settings-specific folders
-   - Decide whether `TimesheetScreen.svelte` should stay as the table-composition layer or be split further into smaller screen-level sections
-   - Decide whether lightweight stores are now useful or whether controller-owned state should remain the primary pattern
-   - Keep views passive and keep native command calls inside bridge modules
-
-2. Continue thinning `src-tauri/src/lib.rs`.
-   - Move orchestration/setup responsibilities into clearer modules where possible
-
-3. Review `src-tauri/src/tray.rs`.
-   - Ensure tray handling delegates quickly and does not become a second controller layer
-
-4. Add a small native integration strategy for behavior browser Playwright cannot prove.
-   - tray interactions
-   - true preview window spawning
-   - external opener flows
-
-5. Consider introducing a clock abstraction for timesheet generation tests.
-
-## Resume point
-
-The refactor did not end in a half-broken state. It ended in a useful transitional state:
-
-- architecture intent is much clearer
-- backend boundaries are better than before
-- frontend controller and bridge seams now exist and are working
-- the QuickPanel controller itself now has clearer internal boundaries for actions, shell behavior, update flow, dialogs, state sync, and lifecycle wiring
-- a real `views/` tree now exists for the QuickPanel surface
-- the Timesheet preview surface now also lives inside the same `views/` architecture
-- test coverage is stronger and more realistic
-- the current UI behavior stayed green through the frontend architectural shift
-- future work is easier to reason about
-
-The next session should treat this as a guided continuation focused on deeper screen decomposition, state-boundary decisions, and remaining composition cleanup, not as a recovery task.
+If work is partial, leave the box unchecked.
