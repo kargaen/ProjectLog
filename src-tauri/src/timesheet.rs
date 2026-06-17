@@ -3,9 +3,13 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, TimeDelta};
 use rust_xlsxwriter::{Format, FormatAlign, Workbook, Worksheet};
-use serde::Serialize;
 
 use crate::{log, log_debug, log_warn};
+
+pub use crate::models::domain::timesheet::{TimesheetFormat, TimesheetOptions, TimesheetRange};
+pub use crate::models::dto::timesheet_dto::{
+    TimesheetPreview, TimesheetPreviewRow, TimesheetPreviewSheet,
+};
 
 const DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 const PREVIEW_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M";
@@ -13,43 +17,6 @@ const ZERO_EPSILON: f64 = 0.000001;
 
 fn is_zero_hours(value: f64) -> bool {
     value.abs() < ZERO_EPSILON
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TimesheetRange {
-    Today,
-    Week,
-    All,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TimesheetFormat {
-    Full,
-    Recent,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TimesheetOptions {
-    pub range: TimesheetRange,
-    pub format: TimesheetFormat,
-}
-
-impl TimesheetOptions {
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub const fn full(range: TimesheetRange) -> Self {
-        Self {
-            range,
-            format: TimesheetFormat::Full,
-        }
-    }
-
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub const fn recent() -> Self {
-        Self {
-            range: TimesheetRange::Today,
-            format: TimesheetFormat::Recent,
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -67,30 +34,6 @@ struct BucketedData<const N: usize> {
 
 type WeekData = BucketedData<7>;
 type RecentData = BucketedData<2>;
-
-#[derive(Clone, Serialize)]
-pub struct TimesheetPreview {
-    pub title: String,
-    pub generated_at: String,
-    pub generated_at_epoch_ms: i64,
-    pub sheets: Vec<TimesheetPreviewSheet>,
-}
-
-#[derive(Clone, Serialize)]
-pub struct TimesheetPreviewSheet {
-    pub name: String,
-    pub columns: Vec<String>,
-    pub rows: Vec<TimesheetPreviewRow>,
-}
-
-#[derive(Clone, Serialize)]
-pub struct TimesheetPreviewRow {
-    pub label: String,
-    pub values: Vec<f64>,
-    pub total: f64,
-    pub is_comment: bool,
-    pub is_total: bool,
-}
 
 struct ParsedLog {
     entries: Vec<Entry>,

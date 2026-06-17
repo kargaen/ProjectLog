@@ -14,6 +14,7 @@ mod controllers {
 pub mod diagnostics;
 mod lifecycle;
 mod logger;
+pub mod models;
 mod projects;
 mod settings;
 mod state;
