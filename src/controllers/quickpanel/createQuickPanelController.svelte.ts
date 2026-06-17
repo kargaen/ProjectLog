@@ -14,10 +14,10 @@ import {
   createTimesheetBridge,
   type TimesheetBridge,
 } from "../../services/bridge/timesheetBridge";
+import { createProjectActionsController } from "../projects/createProjectActionsController";
+import { createSettingsActionsController } from "../settings/createSettingsActionsController";
 import { createQuickPanelDialogActions } from "./createQuickPanelDialogActions";
 import { createQuickPanelLifecycle } from "./createQuickPanelLifecycle";
-import { createQuickPanelProjectActions } from "./createQuickPanelProjectActions";
-import { createQuickPanelSettingsActions } from "./createQuickPanelSettingsActions";
 import { createQuickPanelShellActions } from "./createQuickPanelShellActions";
 import { createQuickPanelStateSync } from "./createQuickPanelStateSync";
 import { createQuickPanelUpdateActions } from "./createQuickPanelUpdateActions";
@@ -161,13 +161,12 @@ export function createQuickPanelController(
     quickPanelBridge,
     minWindowWidth: MIN_WINDOW_WIDTH,
     minWindowHeight: MIN_WINDOW_HEIGHT,
-    getCurrentWindowHeight: () => currentWindowHeight,
     setCurrentWindowHeight: (value) => {
       currentWindowHeight = value;
     },
   });
 
-  const settingsActions = createQuickPanelSettingsActions({
+  const settingsActions = createSettingsActionsController({
     state,
     currentWindow,
     persistUiSettings: stateSync.persistUiSettings,
@@ -175,7 +174,7 @@ export function createQuickPanelController(
     queueSettingsSave: stateSync.queueSettingsSave,
   });
 
-  const projectActions = createQuickPanelProjectActions({
+  const projectActions = createProjectActionsController({
     state,
     view,
     quickPanelBridge,

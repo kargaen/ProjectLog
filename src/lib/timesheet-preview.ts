@@ -1,4 +1,4 @@
-import type { TimesheetPreviewRow, TimesheetPreviewSheet } from "./types";
+import type { TimesheetPreviewRow, TimesheetPreviewSheet } from "../models/types";
 
 export type TimesheetDisplayRow = TimesheetPreviewRow & {
   band_index: number;
