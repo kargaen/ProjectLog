@@ -2,83 +2,103 @@
 ## Mission
 
 See [`README.md`](./README.md) for the full mission statement and product overview.
+
+---
+
+## Five Design Decisions That Keep This Codebase Stable
+
+These five decisions are the load-bearing walls of the architecture. Every naming convention, folder rule, and layer boundary below exists to enforce them. When a bug cascades, it is almost always because one of these was violated.
+
+**1. The import graph flows in one direction only.**
+Views import from controllers. Controllers import from bridge services and stores. Bridge services import from models. Nothing imports from a layer above it. This means you can always locate a bug by asking which layer owns the broken invariant — there is no "could be anywhere" debugging.
+
+**2. Repositories own every storage decision.**
+Nothing above the repository layer knows whether data is in a flat file, JSON, or a different format. Controllers never call filesystem APIs or `invoke` storage commands directly. Swapping a storage backend or format requires changing exactly one file.
+
+**3. Stores are write-through, not write-ahead.**
+Controllers write to a Svelte store only after the native side effect (repository write via Tauri command) succeeds. The store is always a mirror of committed state, never an optimistic prediction. Transient UI state (loading flags, draft values, open dialogs) lives in the controller's local `$state`, not in shared stores.
+
+**4. The component decomposition convention enforces zero logic in markup.**
+Every non-trivial component splits into three files: `Name.view.svelte` for markup only, `Name.styles.ts` for all StyleSheet-equivalent style objects, and `Name.hooks.ts` for any formatting, local state, or derived values. The `.view.svelte` file may only contain JSX-equivalent markup and prop destructuring. No conditionals, no format calls, no event logic beyond passing callbacks through.
+
+**5. Two surfaces share one domain. Neither owns state.**
+The QuickPanel window and the system tray are both surfaces over the same native domain state. Neither surface caches, derives, or manages its own version of the truth. Both call into the same native controllers. When either surface acts, the result is a fresh state snapshot returned from the native layer, which both surfaces then reflect.
+
 ---
 
 ## Architecture Philosophy
 
-ProjectLog uses a strict three-layer MVC split, adapted to the idioms of **Svelte on the frontend** and **Tauri + Rust on the native side**:
+ProjectLog uses a strict MVC split adapted to **Svelte 5 on the frontend** and **Tauri + Rust on the native side**:
 
-| Layer          | Where it lives                                      | Responsibility                                                                                             |
-| -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Model**      | `src/models/` and `src-tauri/src/models/`           | Shape of data — TypeScript/Rust domain types, validation, persistence abstractions, repository contracts   |
-| **View**       | `src/views/`                                        | Pure presentation — Svelte components that receive state and callbacks, with no business decisions         |
-| **Controller** | `src/controllers/` and `src-tauri/src/controllers/` | Business logic — orchestrates models, drives UI state, coordinates native commands, and enforces workflows |
+| Layer          | Where it lives                                      | Responsibility                                                                                           |
+| -------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Model**      | `src/models/` and `src-tauri/src/models/`           | Shape of data — TypeScript/Rust domain types, validation schemas, persistence abstractions, repository contracts |
+| **View**       | `src/views/`                                        | Pure presentation — Svelte components that receive state and emit callbacks, with no business decisions  |
+| **Controller** | `src/controllers/` and `src-tauri/src/controllers/` | Business logic — orchestrates models, drives UI state, coordinates native commands, enforces workflows   |
 
-Because ProjectLog is a desktop app with a frontend/backend split, MVC applies on **both sides**:
+Because ProjectLog is a desktop app with a frontend/native split, MVC applies on **both sides**:
 
 - The **frontend MVC** controls rendering, interaction flow, and view state.
-- The **native MVC** controls persistence, file I/O, timesheet generation, tray behavior, and operating-system integration.
+- The **native MVC** controls persistence, file I/O, timesheet generation, tray behavior, and OS integration.
 
-The boundary between them is explicit:
+The boundary between them is a thin, typed transport layer:
 
-- **Frontend controllers** may call typed command clients in `src/services/bridge/`
+- **Frontend controllers** call typed command clients in `src/services/bridge/`
 - **Views** never call Tauri commands directly
-- **Rust commands** are transport endpoints only; they delegate immediately to native controllers/services
-
-This architecture is intentionally self-documenting. A developer should be able to infer _what belongs where_ from folder names alone.
+- **Rust commands** are transport endpoints only — they delegate immediately to native controllers
 
 ---
 
 ## Stack
 
-| Concern             | Choice                       | Notes                                                                                 |
-| ------------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
-| Desktop shell       | Tauri v2                     | Lightweight desktop app shell with native windowing, tray, autostart, updater support |
-| Frontend UI         | Svelte 5                     | Reactive UI with clear component composition and low boilerplate                      |
-| Frontend language   | TypeScript                   | Strict typing for models, controller APIs, and bridge contracts                       |
-| Build tool          | Vite                         | Fast frontend build and local development                                             |
-| Native language     | Rust                         | Reliable filesystem access, structured domain logic, and desktop integration          |
-| Testing             | Playwright + Cargo tests     | UI regression coverage plus Rust unit/integration tests                               |
-| Packaging / updates | Tauri updater                | App updates remain separate from domain logic                                         |
-| Persistence         | Local files / native storage | Local-first storage for projects, logs, settings, and generated timesheet data        |
+| Concern             | Choice                   | Notes                                                                                 |
+| ------------------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| Desktop shell       | Tauri v2                 | Lightweight desktop shell with native windowing, tray, autostart, updater support    |
+| Frontend UI         | Svelte 5                 | Reactive UI with rune-based reactivity and low boilerplate                            |
+| Frontend language   | TypeScript               | Strict typing for models, controller APIs, and bridge contracts                      |
+| Build tool          | Vite                     | Fast frontend build and local development                                             |
+| Native language     | Rust                     | Reliable filesystem access, structured domain logic, and desktop integration          |
+| Testing             | Playwright + Cargo tests | UI regression coverage plus Rust unit/integration tests                               |
+| Packaging/updates   | Tauri updater            | App updates remain separate from domain logic                                         |
+| Persistence         | Local files only         | Local-first storage for projects, logs, settings, and generated timesheet data        |
 
 ---
 
 ## Architectural Goals
 
-The architecture must optimize for the actual purpose of the product:
+The architecture must serve the actual purpose of the product:
 
-1. **Fast project switching** — selecting what you are working on should take seconds, from either surface.
+1. **Fast project switching** — selecting what you are working on takes seconds, from either surface.
 2. **Reliable daily hour logging** — users must be able to reconstruct hours spent per project each day with confidence.
-3. **Dual-surface consistency** — QuickPanel and the system tray operate on the same domain state; neither surface owns data the other cannot see.
+3. **Dual-surface consistency** — QuickPanel and the tray operate on the same domain state; neither surface sees data the other cannot.
 4. **Local-first trust** — project names, comments, timestamps, and settings remain on the user's machine with no network dependency.
-5. **Safe refactoring** — the codebase should support aggressive reorganization without blurring responsibilities.
+5. **Safe refactoring** — the codebase must support aggressive reorganization without blurring responsibilities.
 6. **Clear expansion path** — reminders, timesheet rounding, export formats, tray flows, and reporting must fit the architecture cleanly.
 
 ---
 
 ## Two Surfaces, One Domain
 
-ProjectLog presents two interaction surfaces over the same underlying domain:
+ProjectLog exposes two interaction surfaces over the same underlying native domain.
 
 ### QuickPanel
 
-A floating Tauri window that gives the user full access to all features. It contains:
+A floating Tauri window with full access to all features:
 
-- A project list with sort modes (Manual, A-Z, Recent) and drag-to-reorder
-- A comment field that attaches context to the active session
+- Project list with sort modes (Manual, A-Z, Recent) and drag-to-reorder
+- Comment field that attaches context to the active session
 - Add project and Quick track (ad-hoc) inputs
 - Timesheet actions: Full timesheet, Yesterday + today, Open log file, Reset timesheet
 - Settings: Always on top, Open on start, Opacity, Compact mode
 
 ### System Tray
 
-A native Windows system tray menu that mirrors the core QuickPanel actions without requiring the window to be open:
+A native system tray menu that mirrors core QuickPanel actions without requiring the window to be open:
 
 - Project list for direct activation
 - Set comment
-- Add project / Quick project / Remove project
-- Generate timesheet (with submenu for range), Open log file, Reset timesheet, Reset projects
+- Add / Quick add / Remove project
+- Generate timesheet (range submenu), Open log file, Reset timesheet, Reset projects
 - Open diagnostic log, Feedback, About, Exit
 
 **Architectural implication:** neither surface owns the domain. Both call into the same native controllers through Tauri commands or tray event handlers. State is owned by the native layer and returned to whichever surface is active.
@@ -93,58 +113,70 @@ Strict one-directional flow. No layer may import from a layer above it.
 
 ```
 Svelte View
-    ↓ user action
+    ↓  user action (callback)
 Frontend Controller
-    ↓ calls
+    ↓  calls
 Bridge Service
-    ↓ invokes
+    ↓  invoke()
 Tauri Command
-    ↓ delegates
+    ↓  delegates immediately
 Native Controller
-    ↓ reads/writes
+    ↓  reads / writes
 Repository / Service
-    ↓ side effects
-Files / OS APIs / Window APIs / Tray / Updater
+    ↓  side effects
+Files / OS APIs / Window / Tray / Updater
 ```
 
 ### State returning to UI
 
 ```
 Repository / Native Service
-    ↓ returns DTO / emits event
+    ↓  returns DTO
 Native Controller
-    ↓ through Tauri command or event
+    ↓  through Tauri command return value or event
 Bridge Service
-    ↓ normalizes
+    ↓  deserializes and returns typed result
 Frontend Controller
-    ↓ updates view model / store
+    ↓  writes to Svelte store (only on success)
 Svelte View
+    ↓  reactive derivation from store
+```
+
+### Ownership chain
+
+```
+Repository (reads/writes data)
+    → Controller (orchestrates, enforces rules)
+    → Store (broadcasts committed state)
+    → View (renders)
 ```
 
 ### Tray flow (no frontend involved)
 
 ```
-User clicks tray menu item
+User clicks tray item
     ↓
 Tray event handler (infrastructure/tray.rs)
-    ↓ delegates
+    ↓  delegates immediately
 Native Controller
-    ↓ reads/writes
+    ↓  reads / writes
 Repository / Service
-    ↓ emits Tauri window event (if QuickPanel is open)
+    ↓  optionally emits Tauri window event if QuickPanel is open
 Frontend Controller re-syncs store
 ```
 
-**Hard rules:**
+### Hard rules
 
-- Views never import from native bridge internals, repositories, or persistence code
+- Views never import from bridge services, repositories, or stores
 - Views never call `invoke` directly
 - Frontend controllers never import Svelte view components
 - Bridge services never contain business rules
 - Tauri commands never contain domain logic beyond transport mapping
 - Native repositories never depend on window, tray, or UI concerns
 - Tray handlers delegate to controllers immediately — they are not controllers themselves
-- Shared types must live in dedicated model/type folders, not inside views or controllers
+- Stores are only written to after the native side effect succeeds
+- Transient state (loading, draft values, dialog open/closed) lives in controller `$state`, not in stores
+- Shared types live in `models/types/`, not inside views or controllers
 
 ---
 
@@ -154,92 +186,82 @@ ProjectLog is organized around six stable business domains.
 
 ### 1. Project Domain
 
-Responsible for:
-
-- permanent projects
-- ad-hoc / quick projects
-- manual ordering
-- sort modes: Manual, A-Z, Recent
-- recent usage metadata for sort and display
+- Permanent projects and ad-hoc / quick projects
+- Manual ordering and drag-to-reorder
+- Sort modes: Manual, A-Z, Recent
+- Recent usage metadata for sort and display
+- Name uniqueness enforcement
 
 ### 2. Session / Log Domain
 
-Responsible for:
-
-- active project state (which project is currently being tracked)
-- start/stop transitions and timestamp recording
-- comment attachment to the active session block
-- append-only log entries that preserve full history
-- reconstructing daily work history from log data
+- Active project state (which project is currently being tracked)
+- Start/stop transitions and timestamp recording
+- Comment attachment to the active session block
+- Append-only log entries that preserve full history
+- Reconstructing daily work history from log data
 
 ### 3. Timesheet Domain
 
-Responsible for:
-
-- aggregating log entries into per-project daily hour totals
-- producing a weekly table (Mon–Sun columns, project rows, comment sub-rows)
-- range selection: full history, this week, yesterday + today
-- rounding rules (e.g. round to 0.5h)
-- preview generation for the Timesheet window
-- export serialization to Excel
+- Aggregating log entries into per-project daily hour totals
+- Producing a weekly table (Mon–Sun columns, project rows, comment sub-rows)
+- Range selection: full history, this week, yesterday + today
+- Rounding rules (e.g. round to 0.5h)
+- Preview generation for the Timesheet window
+- Export serialization to Excel
 
 This domain is core to the product mission. The timesheet output is the primary deliverable users rely on for daily hour reporting.
 
 ### 4. Settings Domain
 
-Responsible for:
-
-- always-on-top window behavior
-- open QuickPanel on system start
+- Always-on-top window behavior
+- Open QuickPanel on system start
 - QuickPanel opacity (0–100%)
-- compact mode (reduced window height)
-- window position and size persistence
-- timesheet rounding rules
+- Compact mode (reduced window height)
+- Window position and size persistence
+- Timesheet rounding rules
 
 ### 5. Desktop Shell Domain
 
-Responsible for:
-
-- system tray menu construction and state
-- tray menu item enabling/disabling based on active session
-- window visibility, focus, and placement
-- autostart integration
-- updater workflows
-- desktop lifecycle events (minimize to tray, restore, close)
+- System tray menu construction and state
+- Tray menu item enabling/disabling based on active session
+- Window visibility, focus, and placement
+- Autostart integration
+- Updater workflows
+- Desktop lifecycle events (minimize to tray, restore, close)
 
 ### 6. Diagnostics Domain
 
-Responsible for:
-
-- structured diagnostic log for troubleshooting
-- app health inspection (storage paths, file integrity, version)
-- debug-safe support output
-- migration/format upgrade visibility
+- Structured diagnostic log for troubleshooting
+- App health inspection (storage paths, file integrity, version)
+- Debug-safe support output
+- Migration and format upgrade visibility
 
 ---
 
-## Recommended Full Tree
+## Full Directory Tree
 
 ```text
 projectlog/
 │
-├── src/                                            # Frontend (Svelte + TypeScript)
+├── src/                                            # Frontend (Svelte 5 + TypeScript)
 │   │
-│   ├── models/                                     # [MODEL] Data shapes, validation schemas, view models
+│   ├── models/                                     # [MODEL] Data shapes and validation
 │   │   ├── types/
-│   │   │   ├── index.ts                            # Barrel export
+│   │   │   ├── index.ts                            # Barrel export — only entry point for types
 │   │   │   ├── project.types.ts                    # Project, AdHocProject, SortMode, RecentMeta
 │   │   │   ├── session.types.ts                    # ActiveSession, LogEntry, TransitionEvent
-│   │   │   ├── timesheet.types.ts                  # DailySummary, ProjectHours, TimesheetRow,
-│   │   │   │                                       # CommentRow, RangeSelection, RoundingRule
+│   │   │   ├── timesheet.types.ts                  # DailySummary, TimesheetRow, CommentRow,
+│   │   │   │                                       # RangeSelection, RoundingRule
 │   │   │   ├── settings.types.ts                   # AppSettings, OpacityValue, CompactMode
 │   │   │   └── diagnostics.types.ts                # DiagnosticsReport, MigrationStatus
 │   │   └── schemas/
-│   │       ├── ProjectSchema.ts                    # Validates project name input
+│   │       ├── ProjectSchema.ts                    # Validates project name input at UI boundary
 │   │       ├── LogEntrySchema.ts                   # Validates log entry payloads from native
 │   │       └── SettingsSchema.ts                   # Validates settings DTO from native
 │   │
-│   ├── controllers/                                # [CONTROLLER] Business logic — no markup, no invoke calls
+│   ├── controllers/                                # [CONTROLLER] Business logic
+│   │   │                                           # No markup. No invoke calls. No store imports
+│   │   │                                           # from other domains.
 │   │   ├── projects/
 │   │   │   ├── createProjectListController.ts      # Load, sort, reorder, select, deselect projects
 │   │   │   └── createQuickEntryController.ts       # Quick-track (ad-hoc) input and submission
@@ -248,12 +270,13 @@ projectlog/
 │   │   ├── timesheets/
 │   │   │   └── createTimesheetController.ts        # Range selection, rounding toggle, preview load, export
 │   │   ├── settings/
-│   │   │   └── createSettingsController.ts         # Load/save settings, opacity, compact mode, always-on-top
+│   │   │   └── createSettingsController.ts         # Load/save settings, opacity, compact, always-on-top
 │   │   └── diagnostics/
 │   │       └── createDiagnosticsController.ts      # Fetch and expose app health state and log path
 │   │
-│   ├── views/                                      # [VIEW] Pure presentation — props in, callbacks out
-│   │   │                                           # No business logic. No invoke calls. No store imports.
+│   ├── views/                                      # [VIEW] Pure presentation
+│   │   │                                           # Props in. Callbacks out. No business logic.
+│   │   │                                           # No invoke calls. No store reads.
 │   │   ├── components/
 │   │   │   ├── ui/                                 # Design-system primitives — zero domain knowledge
 │   │   │   │   ├── Button.view.svelte
@@ -261,44 +284,58 @@ projectlog/
 │   │   │   │   ├── Toggle.view.svelte
 │   │   │   │   ├── Slider.view.svelte
 │   │   │   │   ├── Spinner.view.svelte
-│   │   │   │   └── index.ts                        # Barrel export
+│   │   │   │   └── index.ts
 │   │   │   │
 │   │   │   ├── projects/
-│   │   │   │   ├── ProjectList.view.svelte         # Ordered list of projects; sort tabs at top
-│   │   │   │   ├── ProjectRow.view.svelte          # Row: drag handle, name, active indicator, remove (x)
+│   │   │   │   ├── ProjectList/
+│   │   │   │   │   ├── ProjectList.view.svelte     # Ordered list + sort tabs
+│   │   │   │   │   ├── ProjectList.styles.ts       # All style objects for this component
+│   │   │   │   │   ├── ProjectList.hooks.ts        # Any formatting or derived values
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── ProjectRow/
+│   │   │   │   │   ├── ProjectRow.view.svelte      # Drag handle, name, active indicator, remove
+│   │   │   │   │   ├── ProjectRow.styles.ts
+│   │   │   │   │   └── index.ts
 │   │   │   │   ├── SortTabs.view.svelte            # Manual / A-Z / Recent tab strip
 │   │   │   │   └── AddProjectInput.view.svelte     # "Add project" input + Add button
 │   │   │   │
 │   │   │   ├── sessions/
-│   │   │   │   ├── ActiveSessionHeader.view.svelte # "No active project" / active project name display
-│   │   │   │   ├── CommentInput.view.svelte        # Comment field + Save / Clear buttons
-│   │   │   │   └── QuickTrackInput.view.svelte     # "Quick project" input + Track button
+│   │   │   │   ├── ActiveSessionHeader.view.svelte # Active project name or "No active project"
+│   │   │   │   ├── CommentInput.view.svelte        # Comment field + Save / Clear
+│   │   │   │   └── QuickTrackInput.view.svelte     # Quick project input + Track button
 │   │   │   │
 │   │   │   ├── timesheets/
-│   │   │   │   ├── TimesheetTable.view.svelte      # Weekly grid: project rows, comment sub-rows,
-│   │   │   │   │                                   # Mon–Sun columns, Total column, Total footer row
+│   │   │   │   ├── TimesheetTable/
+│   │   │   │   │   ├── TimesheetTable.view.svelte  # Weekly grid: project rows, comment sub-rows,
+│   │   │   │   │   │                               # Mon–Sun columns, Total column and footer
+│   │   │   │   │   ├── TimesheetTable.styles.ts
+│   │   │   │   │   ├── TimesheetTable.hooks.ts     # Cell formatting, zero detection, column widths
+│   │   │   │   │   └── index.ts
 │   │   │   │   ├── RangeSelector.view.svelte       # Full / Yesterday + today / custom range
-│   │   │   │   ├── RoundingToggle.view.svelte      # "Round to 0.5h" toggle in timesheet footer
-│   │   │   │   ├── GeneratedTimestamp.view.svelte  # "Generated at …, N seconds ago" + Update now
+│   │   │   │   ├── RoundingToggle.view.svelte      # "Round to 0.5h" toggle
+│   │   │   │   ├── GeneratedTimestamp.view.svelte  # "Generated at …" + Update now
 │   │   │   │   └── ExportButton.view.svelte        # Export to Excel button
 │   │   │   │
 │   │   │   ├── settings/
 │   │   │   │   ├── SettingsPanel.view.svelte       # Settings section of QuickPanel
-│   │   │   │   ├── OpacitySlider.view.svelte       # Opacity label + slider + percentage display
+│   │   │   │   ├── OpacitySlider.view.svelte       # Opacity label + slider + percentage
 │   │   │   │   └── CompactModeToggle.view.svelte
 │   │   │   │
 │   │   │   └── diagnostics/
 │   │   │       └── DiagnosticsPanel.view.svelte    # Storage paths, version, migration status
 │   │   │
-│   │   └── screens/
-│   │       ├── QuickPanelScreen.svelte             # Primary floating window — composes all panel sections
+│   │   └── screens/                                # Screens are thin composers
+│   │       │                                       # They instantiate controllers, read stores,
+│   │       │                                       # and pass state + callbacks to domain components.
+│   │       ├── QuickPanelScreen.svelte             # Primary floating window
 │   │       ├── TimesheetScreen.svelte              # Dedicated timesheet preview window
-│   │       └── DiagnosticsScreen.svelte            # Diagnostic log viewer window
+│   │       └── DiagnosticsScreen.svelte            # Diagnostic log viewer
 │   │
 │   ├── services/
-│   │   └── bridge/                                 # Typed Tauri command clients — called by controllers only
-│   │       │                                       # Each file wraps `invoke` for one domain.
-│   │       │                                       # Views and stores never import from here.
+│   │   └── bridge/                                 # Typed Tauri command clients
+│   │       │                                       # Called by controllers only.
+│   │       │                                       # Each file wraps invoke() for one domain.
+│   │       │                                       # No business rules live here.
 │   │       ├── projectBridge.ts                    # add, remove, reorder, select, list
 │   │       ├── sessionBridge.ts                    # startTracking, stopTracking, setComment
 │   │       ├── timesheetBridge.ts                  # generate, getPreview, exportToExcel, reset
@@ -306,20 +343,21 @@ projectlog/
 │   │       └── diagnosticsBridge.ts                # getReport, openLogFile
 │   │
 │   ├── stores/                                     # Svelte stores — written by controllers, read by views
+│   │   │                                           # and screens. Never written to directly from views.
 │   │   ├── projectStore.ts                         # Ordered project list, active project, sort mode
 │   │   ├── sessionStore.ts                         # Active session state, current comment text
 │   │   ├── timesheetStore.ts                       # Preview rows, selected range, rounding state
-│   │   └── settingsStore.ts                        # App settings, opacity, compact mode flag
+│   │   └── settingsStore.ts                        # App settings, opacity, compact mode
 │   │
-│   └── utils/                                      # Pure stateless helpers — no imports from src/
+│   └── utils/                                      # Pure stateless helpers — no MVC imports
 │       ├── formatters.ts                           # Duration display, date formatting, relative time
 │       └── sanitize.ts                             # Project name trimming and validation helpers
 │
 │
 ├── src-tauri/src/                                  # Native (Rust)
 │   │
-│   ├── commands/                                   # Tauri transport endpoints — delegate immediately, no logic
-│   │   │                                           # A command that grows domain logic is a bug.
+│   ├── commands/                                   # Tauri transport endpoints — no domain logic
+│   │   │                                           # A command that contains business logic is a bug.
 │   │   ├── project_commands.rs
 │   │   ├── session_commands.rs
 │   │   ├── timesheet_commands.rs
@@ -327,8 +365,8 @@ projectlog/
 │   │   └── diagnostics_commands.rs
 │   │
 │   ├── controllers/                                # [CONTROLLER] Domain rules and workflow orchestration
-│   │   ├── project_controller.rs                  # Add, remove, reorder, select, list projects;
-│   │   │                                           # enforce name uniqueness; update recent metadata
+│   │   ├── project_controller.rs                  # Add, remove, reorder, select; enforce name uniqueness;
+│   │   │                                           # update recent usage metadata
 │   │   ├── session_controller.rs                  # Start/stop tracking; write log entry on transition;
 │   │   │                                           # attach comment to active session block
 │   │   ├── timesheet_controller.rs                # Delegate to timesheet_service; apply rounding;
@@ -336,7 +374,7 @@ projectlog/
 │   │   ├── settings_controller.rs                 # Load, merge, validate, and persist settings;
 │   │   │                                           # notify shell of opacity/always-on-top changes
 │   │   ├── shell_controller.rs                    # Window show/hide, position restore, tray sync,
-│   │   │                                           # compact mode application, autostart toggle
+│   │   │                                           # compact mode, autostart toggle
 │   │   └── diagnostics_controller.rs              # Collect health report; open diagnostic log in OS viewer
 │   │
 │   ├── models/                                     # [MODEL] Domain types, DTOs, and repository traits
@@ -355,8 +393,9 @@ projectlog/
 │   │       ├── log_repository.rs                  # trait LogRepository — append, list_for_day, list_range
 │   │       └── settings_repository.rs             # trait SettingsRepository — load, save
 │   │
-│   ├── repositories/                               # Concrete persistence — controllers never know the format
-│   │   ├── file_project_repository.rs             # Implements ProjectRepository over local JSON file
+│   ├── repositories/                               # Concrete persistence — one file per entity
+│   │   │                                           # Controllers never know the storage format.
+│   │   ├── file_project_repository.rs             # Implements ProjectRepository over local file
 │   │   ├── file_log_repository.rs                 # Implements LogRepository; append-only log format
 │   │   └── file_settings_repository.rs            # Implements SettingsRepository over local config file
 │   │
@@ -366,12 +405,12 @@ projectlog/
 │   │   │                                           # produces export-ready data; never mutates source log
 │   │   ├── migration_service.rs                   # Startup detection of legacy file formats;
 │   │   │                                           # upgrades format in place; records migration in diagnostic log
-│   │   └── export_service.rs                      # Serializes timesheet DTO to Excel (.xlsx) format
+│   │   └── export_service.rs                      # Serializes timesheet DTO to Excel (.xlsx)
 │   │
 │   ├── infrastructure/                             # OS-level glue — no domain logic lives here
-│   │   ├── tray.rs                                # Tray menu construction, item state, event dispatch;
-│   │   │                                           # maps tray events to controller calls;
-│   │   │                                           # syncs enabled/disabled state from active session
+│   │   ├── tray.rs                                # Tray menu construction and event dispatch;
+│   │   │                                           # maps tray events to controller calls immediately;
+│   │   │                                           # syncs item enabled/disabled state from active session
 │   │   ├── window.rs                              # Window creation, show/hide, bounds save/restore,
 │   │   │                                           # always-on-top, opacity application
 │   │   └── autostart.rs                           # OS autostart registry integration
@@ -381,28 +420,22 @@ projectlog/
 │
 │
 ├── tests/
-│   ├── e2e/                                        # Playwright end-to-end tests against the real app
-│   │   ├── quick_track.spec.ts                     # Critical: fast project switching in QuickPanel
-│   │   ├── comment_attach.spec.ts                  # Critical: comment saved against correct session
-│   │   ├── timesheet_preview.spec.ts               # Critical: daily hour totals are accurate
-│   │   ├── timesheet_rounding.spec.ts              # Critical: rounding rules applied correctly
-│   │   ├── tray_project_select.spec.ts             # Critical: tray project selection updates QuickPanel
-│   │   ├── settings_persist.spec.ts                # Window bounds, opacity, and compact mode survive restart
+│   ├── e2e/                                        # Playwright end-to-end tests
+│   │   ├── quick_track.spec.ts                     # Fast project switching in QuickPanel
+│   │   ├── comment_attach.spec.ts                  # Comment saved against correct session
+│   │   ├── timesheet_preview.spec.ts               # Daily hour totals are accurate
+│   │   ├── timesheet_rounding.spec.ts              # Rounding rules applied correctly
+│   │   ├── tray_project_select.spec.ts             # Tray selection updates QuickPanel
+│   │   ├── settings_persist.spec.ts                # Opacity, compact mode survive restart
 │   │   └── export_excel.spec.ts                   # Export produces valid .xlsx without corrupting log
 │   │
-│   └── rust/                                       # Cargo integration tests (complement to in-module unit tests)
-│       ├── timesheet_aggregation.rs               # Multi-day log → correct daily totals, comment grouping
+│   └── rust/                                       # Cargo integration tests
+│       ├── timesheet_aggregation.rs               # Multi-day log → correct daily totals
 │       ├── timesheet_rounding.rs                  # Edge cases: sub-interval, overnight, zero entries
-│       └── migration.rs                           # Legacy format detected, upgraded, and re-readable
+│       └── migration.rs                           # Legacy format detected, upgraded, re-readable
 │
 │
 ├── scripts/
-│   ├── save-wip.ps1
-│   ├── push-wip.ps1
-│   ├── release.mjs
-│   ├── sync-version.mjs
-│   └── push-release.ps1
-│
 ├── docs/
 ├── package.json
 ├── tsconfig.json
@@ -414,94 +447,97 @@ projectlog/
 
 ---
 
-## Why This Tree Fits ProjectLog
+## Naming Conventions
 
-The structure is organized around the actual domains of the product rather than the current files:
+| Artefact                 | Convention              | Example                          |
+| ------------------------ | ----------------------- | -------------------------------- |
+| Domain type file         | `{entity}.types.ts`     | `session.types.ts`               |
+| Validation schema        | `{Entity}Schema.ts`     | `SettingsSchema.ts`              |
+| Frontend controller      | `create{Domain}Controller.ts` | `createTimesheetController.ts` |
+| Bridge service           | `{domain}Bridge.ts`     | `timesheetBridge.ts`             |
+| Svelte store             | `{domain}Store.ts`      | `projectStore.ts`                |
+| View component file      | `{Name}.view.svelte`    | `ProjectRow.view.svelte`         |
+| Component styles         | `{Name}.styles.ts`      | `TimesheetTable.styles.ts`       |
+| Component hooks          | `{Name}.hooks.ts`       | `TimesheetTable.hooks.ts`        |
+| Screen component         | `{Name}Screen.svelte`   | `TimesheetScreen.svelte`         |
+| Rust controller          | `{domain}_controller.rs`| `timesheet_controller.rs`        |
+| Repository trait         | `{domain}_repository.rs`| `log_repository.rs`              |
+| Concrete repository      | `file_{domain}_repository.rs` | `file_log_repository.rs`   |
+| Domain model             | `{entity}.rs`           | `log_entry.rs`                   |
+| DTO                      | `{domain}_dto.rs`       | `timesheet_dto.rs`               |
+| Tauri command file       | `{domain}_commands.rs`  | `session_commands.rs`            |
 
-- **Projects** — what the user works on; ordered, sortable, permanent or ad-hoc
-- **Sessions / log entries** — when they worked on it; start/stop timestamps with optional comments
-- **Timesheets** — the primary deliverable: per-project daily hour totals derived from log entries
-- **Settings** — startup behavior, window behavior, opacity, compact mode, rounding rules
-- **Desktop shell** — tray, window lifecycle, and OS integration, isolated from domain logic
-- **Diagnostics** — operational transparency for debugging and support
-
-This separation ensures that "generate daily project hour insight" is treated as a first-class domain concern rather than a utility feature bolted onto the UI.
+Folder names use `kebab-case` on the frontend and `snake_case` on the native side.
 
 ---
 
-## Key Conventions
+## Import Graph Rule
 
-### File Naming
+Each layer may only import from layers below it. Violations are bugs.
 
-| Artefact              | Convention             | Example                        |
-| --------------------- | ---------------------- | ------------------------------ |
-| Svelte view component | `Name.view.svelte`     | `ProjectRow.view.svelte`       |
-| Screen                | `NameScreen.svelte`    | `TimesheetScreen.svelte`       |
-| Frontend controller   | `createXController.ts` | `createTimesheetController.ts` |
-| Bridge service        | `xBridge.ts`           | `timesheetBridge.ts`           |
-| Store                 | `xStore.ts`            | `projectStore.ts`              |
-| Rust controller       | `x_controller.rs`      | `timesheet_controller.rs`      |
-| Repository trait      | `x_repository.rs`      | `log_repository.rs`            |
-| Concrete repository   | `file_x_repository.rs` | `file_log_repository.rs`       |
-| Domain model          | `x.rs`                 | `log_entry.rs`                 |
-| DTO                   | `x_dto.rs`             | `timesheet_dto.rs`             |
-| Tauri commands        | `x_commands.rs`        | `settings_commands.rs`         |
-| Validation schema     | `NameSchema.ts`        | `SettingsSchema.ts`            |
+### Frontend
 
-### Commenting Practice
-
-Prefer self-explanatory code over explanatory comments. Add comments only where they provide context the code itself cannot express quickly, such as architectural intent, non-obvious constraints, workflow invariants, edge-case reasoning, or why a particular approach was chosen. Do not add comments that merely restate what the next line of code already says. A small number of high-value comments is preferred over pervasive low-signal commentary.
-
-- Comment `why`, not `what`.
-- Comment invariants, assumptions, and surprising behavior.
-- Comment cross-layer or cross-domain decisions that would be hard to infer locally.
-- Avoid line-by-line narration of obvious code.
-- If a function needs many explanatory comments, prefer refactoring it into clearer names and smaller units first.
-
-Comments should reduce future confusion, not decorate code.
-
-### Dependency Rule
-
-Each layer may only import from layers _below_ it. Violations are treated as bugs.
-
-#### Frontend
-
-```text
-┌────────────────────────────────────┐
-│ View (screens, components)         │ ← imports controllers, view models, ui primitives
-├────────────────────────────────────┤
-│ Controllers                        │ ← imports bridge services, stores, models
-├────────────────────────────────────┤
-│ Bridge services / stores           │ ← imports models and transport helpers
-├────────────────────────────────────┤
-│ Models / schemas / mappers         │ ← imports utility-only helpers
-└────────────────────────────────────┘
+```
+┌──────────────────────────────────────────┐
+│  Screens                                 │  imports controllers, stores, view components
+├──────────────────────────────────────────┤
+│  View components                         │  imports ui primitives, utils — nothing else
+├──────────────────────────────────────────┤
+│  Controllers                             │  imports bridge services, stores, models/types
+├──────────────────────────────────────────┤
+│  Bridge services / Stores                │  imports models/types only
+├──────────────────────────────────────────┤
+│  Models / schemas / utils                │  no MVC imports
+└──────────────────────────────────────────┘
 ```
 
-#### Native
+Screens are the only layer permitted to read from stores and instantiate controllers. View components never read from stores — they receive state as props.
 
-```text
-┌────────────────────────────────────┐
-│ Tauri commands / tray handlers     │ ← imports controllers only
-├────────────────────────────────────┤
-│ Controllers                        │ ← imports repositories, services, state, models
-├────────────────────────────────────┤
-│ Repositories / services            │ ← imports models, infrastructure, utils
-├────────────────────────────────────┤
-│ Models / DTOs / traits             │ ← no UI concerns, no OS concerns
-└────────────────────────────────────┘
+### Native
+
+```
+┌──────────────────────────────────────────┐
+│  Commands / Tray handlers                │  imports controllers and state only
+├──────────────────────────────────────────┤
+│  Controllers                             │  imports repositories, services, models, state
+├──────────────────────────────────────────┤
+│  Repositories / Services                 │  imports models, infrastructure, utils
+├──────────────────────────────────────────┤
+│  Models / DTOs / traits                  │  no UI concerns, no OS concerns
+└──────────────────────────────────────────┘
 ```
 
-### Frontend Controller Pattern
+---
 
-Frontend controllers are the only layer screen components interact with. They own async state, call bridge services, normalize data, update stores, and expose a clean action surface. They do not render markup.
+## Component Decomposition Convention
+
+Every non-trivial view component splits into up to three files in its own folder:
+
+```
+ProjectList/
+├── ProjectList.view.svelte   ← markup and prop destructuring only
+├── ProjectList.styles.ts     ← all style objects
+├── ProjectList.hooks.ts      ← formatting, local state, derived values
+└── index.ts                  ← re-exports the view component
+```
+
+**`*.view.svelte`** — contains only markup and prop destructuring. No conditional logic beyond template branching. No format calls. No local `$state`. Calls to handlers are passed in as callbacks via `$props()`.
+
+**`*.styles.ts`** — exports plain style constant objects. No imports from the MVC layers. No reactive code.
+
+**`*.hooks.ts`** — exports a `create{Name}Hooks` function that takes props and returns derived values and formatting helpers. Uses `$derived` for reactive derivations. No side effects. No store writes.
+
+Simple presentational components (e.g. `SortTabs`, `RoundingToggle`) that need no formatting or local state may use a single file without a folder.
+
+---
+
+## Frontend Controller Pattern
+
+Controllers are the only layer screen components interact with. They own async state, call bridge services, normalize data, write to stores, and expose a stable action surface. They never render markup.
 
 ```ts
 // src/controllers/projects/createProjectListController.ts
-export function createProjectListController(deps: {
-  projectBridge: ProjectBridge;
-  projectStore: ProjectStore;
-}) {
+export function createProjectListController() {
   let loading = $state(false);
   let error = $state<string | null>(null);
 
@@ -509,8 +545,8 @@ export function createProjectListController(deps: {
     loading = true;
     error = null;
     try {
-      const nextState = await deps.projectBridge.selectProject(name);
-      deps.projectStore.apply(nextState);
+      const nextState = await projectBridge.selectProject(name);
+      projectStore.apply(nextState); // write-through: only on success
     } catch {
       error = "Could not select project.";
     } finally {
@@ -520,19 +556,61 @@ export function createProjectListController(deps: {
 
   return {
     selectProject,
-    get loading() {
-      return loading;
-    },
-    get error() {
-      return error;
-    },
+    get loading() { return loading; },
+    get error()   { return error; },
   };
 }
 ```
 
-### Native Controller Pattern
+**What a controller owns:**
+- Local `loading` and `error` `$state`
+- All business rules for its domain (validation, sequencing, error handling)
+- Calls to bridge services
+- Store writes (only after side effects succeed)
+- The action surface returned to screens
 
-Native controllers own application rules. Tauri commands and tray handlers should forward to them immediately — neither is a substitute for a controller.
+**What a controller never does:**
+- Returns or imports JSX/Svelte markup
+- Imports from other controllers
+- Calls `invoke` directly (delegates to bridge)
+- Writes to a store before the native side effect succeeds
+
+---
+
+## Store Pattern
+
+Stores hold committed domain state. They are written by controllers and read by screens and view hooks. View components never read from stores directly — they receive store-derived state as props from screens.
+
+```ts
+// src/stores/projectStore.ts
+import { writable, derived } from 'svelte/store';
+import type { ProjectState } from '../models/types';
+
+function createProjectStore() {
+  const { subscribe, set, update } = writable<ProjectState | null>(null);
+
+  return {
+    subscribe,
+    apply: (state: ProjectState) => set(state),
+    reset: () => set(null),
+  };
+}
+
+export const projectStore = createProjectStore();
+```
+
+**Store rules:**
+- One store per domain slice
+- Stores expose a minimal mutation surface (`apply`, `reset`) — not a generic `set`
+- Controllers call `apply` only after the native side effect succeeds
+- Transient state (loading flags, draft values, dialog states) lives in controller `$state`, not in stores
+- Derived values (e.g. sorted project list, active project name) use Svelte `derived()` inside the store or in component hooks — not recomputed inline in views
+
+---
+
+## Native Controller Pattern
+
+Native controllers own application rules. Tauri commands and tray handlers forward to them immediately — neither is a substitute for a controller.
 
 ```rust
 // src-tauri/src/controllers/session_controller.rs
@@ -552,9 +630,11 @@ impl<L: LogRepository, P: ProjectRepository> SessionController<L, P> {
 }
 ```
 
-### Repository Pattern
+---
 
-Repositories abstract persistence. Controllers should not care whether project data lives in flat files today or SQLite tomorrow.
+## Repository Pattern
+
+Repositories abstract persistence entirely. Controllers never know the storage format.
 
 ```rust
 // src-tauri/src/models/repository_traits/log_repository.rs
@@ -565,9 +645,13 @@ pub trait LogRepository {
 }
 ```
 
-### Command Boundary Pattern
+Swapping the storage format (flat file → structured format) requires changing only the concrete repository in `repositories/`, not the controller.
 
-Tauri commands are transport adapters, not business modules.
+---
+
+## Command Boundary Pattern
+
+Tauri commands are transport adapters only. If a command contains business logic, that logic belongs in a controller.
 
 ```rust
 // src-tauri/src/commands/session_commands.rs
@@ -577,57 +661,66 @@ pub fn start_tracking(project: String, state: State<AppState>) -> Result<Project
 }
 ```
 
-If a command grows real business logic, that logic belongs in a controller.
+---
 
-### Tray Handler Pattern
+## Tray Handler Pattern
 
-Tray handlers are event adapters, not business modules. They mirror the command boundary pattern on the native side.
+Tray handlers are event adapters. They mirror the command boundary pattern: receive an event, delegate to a controller immediately, optionally sync the QuickPanel window.
 
 ```rust
 // src-tauri/src/infrastructure/tray.rs
 SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
-    project if projects.contains(project) => {
+    project if known_projects.contains(project) => {
         app.state::<AppState>().session_controller.start_tracking(project).ok();
         sync_quickpanel_if_open(&app);
     }
-    "open_quickpanel" => { shell_controller.show_quickpanel(); }
+    "open_quickpanel" => {
+        app.state::<AppState>().shell_controller.show_quickpanel();
+    }
     _ => {}
 }
 ```
 
-### View Pattern
+---
 
-Views receive already-prepared state and emit intent callbacks. A view may know _what to show_, but never _what the business rules are_.
+## View Pattern
+
+Views receive already-prepared state and emit intent via callbacks. A view knows what to show, but never what the business rules are.
 
 ```svelte
 <!-- src/views/components/projects/ProjectRow.view.svelte -->
 <script lang="ts">
-  let {
-    name,
-    isActive,
-    onSelect,
-    onRemove,
-  }: {
+  let { name, isActive, onSelect, onRemove }: {
     name: string;
     isActive: boolean;
     onSelect: (name: string) => void;
     onRemove: (name: string) => void;
   } = $props();
 </script>
+
+<div class="row" class:active={isActive}>
+  <button onclick={() => onSelect(name)}>{name}</button>
+  <button onclick={() => onRemove(name)}>×</button>
+</div>
 ```
 
-### Self-Documenting Folder Rule
+---
 
-A folder should answer one of these questions immediately:
+## Self-Documenting Folder Rule
 
-- **Is this domain shape?** → `models/`
-- **Is this business behavior?** → `controllers/`
-- **Is this rendering?** → `views/`
-- **Is this transport or side effects?** → `services/bridge/` or `commands/`
-- **Is this persistence detail?** → `repositories/`
-- **Is this operating-system glue?** → `infrastructure/`
+A folder should answer one of these questions on sight:
 
-If a file cannot be placed confidently, that usually indicates the responsibility is still unclear.
+| Question                        | Folder                        |
+| ------------------------------- | ----------------------------- |
+| Is this domain shape?           | `models/`                     |
+| Is this business behavior?      | `controllers/`                |
+| Is this rendering?              | `views/`                      |
+| Is this transport?              | `services/bridge/` / `commands/` |
+| Is this persistence detail?     | `repositories/`               |
+| Is this OS-level glue?          | `infrastructure/`             |
+| Is this shared reactive state?  | `stores/`                     |
+
+If a file cannot be placed confidently, that usually means the responsibility is still unclear.
 
 ---
 
@@ -635,19 +728,19 @@ If a file cannot be placed confidently, that usually indicates the responsibilit
 
 The MVC split makes each layer independently testable with small, focused mocks.
 
-| Layer                     | What to test                                              | Mock boundary                    |
-| ------------------------- | --------------------------------------------------------- | -------------------------------- |
-| Frontend `models/schemas` | Payload parsing and invalid-state rejection               | None needed                      |
-| Frontend controllers      | Async state, command sequencing, error handling           | Mock bridge services             |
-| Frontend views            | Render behavior, callbacks, keyboard and input flows      | Mock controllers / props         |
-| Bridge services           | Command/event normalization                               | Mock `invoke` / event APIs       |
-| Native controllers        | Domain workflows and rule enforcement                     | Mock repositories and services   |
-| Native repositories       | File/storage behavior and data mapping                    | Mock filesystem / infrastructure |
-| `timesheet_service`       | Hour aggregation, rounding, comment grouping, range logic | Mock repositories or clocks      |
-| `migration_service`       | Legacy format detection, upgrade correctness              | Mock filesystem                  |
-| End-to-end                | Real desktop behavior across both surfaces                | Playwright                       |
+| Layer                     | What to test                                              | Mock boundary                       |
+| ------------------------- | --------------------------------------------------------- | ----------------------------------- |
+| Frontend `models/schemas` | Payload parsing and invalid-state rejection               | None needed                         |
+| Frontend controllers      | Async state, command sequencing, error handling           | Mock bridge services                |
+| Frontend views            | Render behavior, callbacks, keyboard and input flows      | Props only — no stores or bridges   |
+| Bridge services           | Command normalization and return type mapping             | Mock `invoke`                       |
+| Native controllers        | Domain workflows and rule enforcement                     | Mock repositories and services      |
+| Native repositories       | File/storage behavior and data mapping                    | Mock filesystem / infrastructure    |
+| `timesheet_service`       | Hour aggregation, rounding, comment grouping, range logic | Mock repositories or clock          |
+| `migration_service`       | Legacy format detection, upgrade correctness              | Mock filesystem                     |
+| End-to-end                | Real desktop behavior across both surfaces                | Playwright                          |
 
-**Critical regression paths for ProjectLog:**
+**Critical regression paths:**
 
 1. Selecting a project in QuickPanel starts a session and updates tray state
 2. Selecting a project in the tray starts a session and updates QuickPanel if open
@@ -662,8 +755,6 @@ The MVC split makes each layer independently testable with small, focused mocks.
 
 ## Persistence Philosophy
 
-ProjectLog is a local-first tool. Persistence rules should be explicit:
-
 1. User project data, comments, timestamps, and settings are stored locally only — no cloud, no auth.
 2. The log is append-only. Timesheet generation reads from it; nothing writes to it except session transitions.
 3. Persistence format is an implementation detail hidden behind repository traits.
@@ -673,28 +764,38 @@ ProjectLog is a local-first tool. Persistence rules should be explicit:
 
 ---
 
+## Commenting Practice
+
+Prefer self-explanatory names over explanatory comments. Add a comment only where it conveys something the code itself cannot: an architectural constraint, a non-obvious invariant, a workaround for a specific bug, or surprising behavior. Comment the *why*, not the *what*.
+
+- Comment invariants, assumptions, and surprising behavior.
+- Comment cross-layer or cross-domain decisions that would be hard to infer locally.
+- Never narrate what the next line does.
+
+---
+
 ## Refactor Guidance
 
-This architecture is intended to guide a heavy refactor. During that refactor:
+During any refactor pass, one file at a time:
 
-- do **not** move business logic into Svelte views
-- do **not** let Tauri commands become controller substitutes
-- do **not** let tray handlers become controller substitutes
-- do **not** hide domain rules inside utility files
-- do **not** let desktop-shell code leak into project/session/timesheet domains
-- do **not** optimize for current file layout over long-term clarity
+- Do not move business logic into Svelte views
+- Do not let Tauri commands become controller substitutes
+- Do not let tray handlers contain domain logic
+- Do not hide domain rules inside utility files
+- Do not let desktop-shell code leak into project/session/timesheet domains
+- Do not optimize for current file layout over long-term clarity
 
-The goal is not to mirror the current project structure. The goal is a codebase where the architecture itself explains how ProjectLog helps users track work daily and produce trustworthy hour summaries.
+When a refactor pass breaks downstream files intentionally, state that clearly. The app is allowed to be broken between layer passes — the agent working the refactor must not leave backwards-compatibility shims behind to avoid that breakage. Make the clean change and document what must follow.
 
 ---
 
 ## Summary
 
-ProjectLog is refactored into a dual-layer MVC system:
+ProjectLog is a dual-surface MVC desktop application:
 
-- **Frontend MVC** for Svelte rendering and interaction in the QuickPanel and Timesheet windows
-- **Native MVC** for Rust domain logic, persistence, tray, and OS integration
-- **Thin transport boundary** between them via typed bridge services and Tauri commands
-- **Two surfaces (QuickPanel, tray) over one domain** — neither surface owns state
+- **Frontend MVC** — Svelte 5 rendering and interaction in the QuickPanel and Timesheet windows
+- **Native MVC** — Rust domain logic, persistence, tray, and OS integration
+- **Thin transport boundary** — typed bridge services and Tauri commands connect the two
+- **Two surfaces, one domain** — QuickPanel and tray both call the same controllers and reflect the same committed state
 
-That structure best serves the product mission: a fast, private, local-only desktop tool for logging what was worked on each day, how long it took, and turning that activity into reliable project-hour insight.
+That structure serves one mission: a fast, private, local-only desktop tool for logging what was worked on each day, how long it took, and turning that activity into reliable project-hour output.
