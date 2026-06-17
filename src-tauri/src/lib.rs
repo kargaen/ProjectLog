@@ -16,6 +16,7 @@ mod lifecycle;
 mod logger;
 pub mod models;
 mod projects;
+mod repositories;
 mod settings;
 mod state;
 mod timesheet;

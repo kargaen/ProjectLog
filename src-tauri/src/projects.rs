@@ -1,39 +1,20 @@
-use std::fs;
 use std::path::Path;
 
-use crate::log;
+use crate::models::repository_traits::project_repository::ProjectRepository;
+use crate::repositories::file_project_repository::FileProjectRepository;
 
-/// Load projects from projects.dat, one per line.
 pub fn load(data_dir: &Path) -> Vec<String> {
-    let path = data_dir.join("projects.dat");
-    if !path.exists() {
-        log!("projects.dat missing; starting with empty project list");
-        return Vec::new();
-    }
-    let projects: Vec<String> = fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .filter(|l| !l.is_empty())
-        .map(|l| l.to_string())
-        .collect();
-    log!("loaded {} projects", projects.len());
-    projects
+    FileProjectRepository::new(data_dir).load()
 }
 
-/// Save projects to projects.dat, one per line.
 pub fn save(data_dir: &Path, projects: &[String]) {
-    log!("save {} projects", projects.len());
-    let path = data_dir.join("projects.dat");
-    let mut content = projects.join("\n");
-    if !projects.is_empty() {
-        content.push('\n');
-    }
-    fs::write(path, content).expect("failed to save projects");
+    FileProjectRepository::new(data_dir).save(projects);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
