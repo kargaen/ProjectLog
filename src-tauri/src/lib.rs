@@ -17,6 +17,7 @@ mod logger;
 pub mod models;
 mod projects;
 mod repositories;
+mod services;
 mod settings;
 mod state;
 mod timesheet;

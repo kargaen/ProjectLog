@@ -1,0 +1,289 @@
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, TimeDelta};
+
+use crate::models::domain::timesheet::{TimesheetFormat, TimesheetOptions, TimesheetRange};
+use crate::models::dto::timesheet_dto::{TimesheetPreview, TimesheetPreviewRow, TimesheetPreviewSheet};
+
+const DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
+const PREVIEW_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M";
+
+#[derive(Clone)]
+struct Entry {
+    timestamp: NaiveDateTime,
+    project: String,
+    comment: String,
+}
+
+#[derive(Default)]
+struct BucketedData<const N: usize> {
+    projects: BTreeMap<String, [f64; N]>,
+    comments: BTreeMap<String, BTreeMap<String, [f64; N]>>,
+}
+
+type WeekData = BucketedData<7>;
+type RecentData = BucketedData<2>;
+
+struct ParsedLog {
+    entries: Vec<Entry>,
+    today_date: NaiveDate,
+    yesterday_date: NaiveDate,
+    current_week: chrono::IsoWeek,
+}
+
+fn parse_log(data_dir: &Path, recent_only: bool) -> Result<ParsedLog, String> {
+    let log_path = data_dir.join("log.dat");
+    let content =
+        std::fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log: {}", e))?;
+
+    let today = Local::now().naive_local();
+    let today_date = today.date();
+    let yesterday_date = today_date - TimeDelta::days(1);
+    let current_week = today_date.iso_week();
+
+    let mut entries: Vec<Entry> = Vec::new();
+    let mut last_entry_before_recent: Option<Entry> = None;
+
+    for line in content.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let Ok(timestamp) = NaiveDateTime::parse_from_str(parts[0], DATE_FORMAT) else {
+            continue;
+        };
+
+        let entry = Entry {
+            timestamp,
+            project: parts[1].to_string(),
+            comment: if parts.len() > 2 {
+                parts[2..].join(" ")
+            } else {
+                String::new()
+            },
+        };
+
+        if recent_only {
+            if entry.timestamp.date() < yesterday_date {
+                last_entry_before_recent = Some(entry);
+                continue;
+            }
+            if entries.is_empty() {
+                if let Some(previous) = last_entry_before_recent.take() {
+                    entries.push(previous);
+                }
+            }
+        }
+
+        entries.push(entry);
+    }
+
+    if entries.is_empty() {
+        return Err("Your timesheet is empty.".to_string());
+    }
+
+    entries.sort_by_key(|entry| entry.timestamp);
+
+    Ok(ParsedLog {
+        entries,
+        today_date,
+        yesterday_date,
+        current_week,
+    })
+}
+
+fn include_date(date: NaiveDate, options: TimesheetOptions, parsed: &ParsedLog) -> bool {
+    match options.range {
+        TimesheetRange::Today => date == parsed.today_date,
+        TimesheetRange::Week => {
+            let week = date.iso_week();
+            week.year() == parsed.current_week.year() && week.week() == parsed.current_week.week()
+        }
+        TimesheetRange::All => true,
+    }
+}
+
+fn accumulate_hours<const N: usize>(
+    output: &mut BucketedData<N>,
+    project: &str,
+    comment: &str,
+    day_index: usize,
+    hours: f64,
+) {
+    let project_hours = output
+        .projects
+        .entry(project.to_string())
+        .or_insert([0.0; N]);
+    project_hours[day_index] += hours;
+
+    if comment.is_empty() {
+        return;
+    }
+
+    let comment_hours = output
+        .comments
+        .entry(project.to_string())
+        .or_default()
+        .entry(comment.to_string())
+        .or_insert([0.0; N]);
+    comment_hours[day_index] += hours;
+}
+
+fn build_rows<const N: usize>(data: &BucketedData<N>) -> Vec<TimesheetPreviewRow> {
+    let mut rows = Vec::new();
+    let mut day_totals = [0.0f64; N];
+
+    for (project, hours) in &data.projects {
+        if !hours.iter().any(|&hour| hour > 0.0) {
+            continue;
+        }
+
+        rows.push(TimesheetPreviewRow {
+            label: project.clone(),
+            values: hours.to_vec(),
+            total: hours.iter().sum(),
+            is_comment: false,
+            is_total: false,
+        });
+
+        for (index, hour) in hours.iter().enumerate() {
+            day_totals[index] += hour;
+        }
+
+        if let Some(comments) = data.comments.get(project) {
+            for (comment, comment_hours) in comments {
+                if !comment_hours.iter().any(|&hour| hour > 0.0) {
+                    continue;
+                }
+
+                rows.push(TimesheetPreviewRow {
+                    label: format!("  - {}", comment),
+                    values: comment_hours.to_vec(),
+                    total: comment_hours.iter().sum(),
+                    is_comment: true,
+                    is_total: false,
+                });
+            }
+        }
+    }
+
+    rows.push(TimesheetPreviewRow {
+        label: "Total".to_string(),
+        values: day_totals.to_vec(),
+        total: day_totals.iter().sum(),
+        is_comment: false,
+        is_total: true,
+    });
+
+    rows
+}
+
+fn build_preview(parsed: ParsedLog, options: TimesheetOptions) -> Result<TimesheetPreview, String> {
+    type WeekKey = (i32, u32);
+
+    let mut weekly_output: BTreeMap<WeekKey, WeekData> = BTreeMap::new();
+    let mut recent_output = RecentData::default();
+
+    for index in 0..parsed.entries.len().saturating_sub(1) {
+        let entry = &parsed.entries[index];
+        let next = &parsed.entries[index + 1];
+
+        if entry.project.is_empty() {
+            continue;
+        }
+
+        let hours = (next.timestamp - entry.timestamp).num_seconds() as f64 / 3600.0;
+        if hours <= 0.0 {
+            continue;
+        }
+
+        let date = entry.timestamp.date();
+        if !include_date(date, options, &parsed) {
+            continue;
+        }
+
+        if options.format == TimesheetFormat::Recent {
+            if date == parsed.yesterday_date || date == parsed.today_date {
+                let day_index = if date == parsed.yesterday_date { 0 } else { 1 };
+                accumulate_hours(
+                    &mut recent_output,
+                    &entry.project,
+                    &entry.comment,
+                    day_index,
+                    hours,
+                );
+            }
+            continue;
+        }
+
+        let iso_week = date.iso_week();
+        let week_key = (iso_week.year(), iso_week.week());
+        let weekday_index = date.weekday().num_days_from_monday() as usize;
+        let week_data = weekly_output.entry(week_key).or_default();
+        accumulate_hours(
+            week_data,
+            &entry.project,
+            &entry.comment,
+            weekday_index,
+            hours,
+        );
+    }
+
+    let generated_at = Local::now();
+    let generated_label = generated_at.format(PREVIEW_TIMESTAMP_FORMAT).to_string();
+    let generated_epoch_ms = generated_at.timestamp_millis();
+
+    if options.format == TimesheetFormat::Recent {
+        if !recent_output
+            .projects
+            .values()
+            .any(|hours| hours.iter().any(|&hour| hour > 0.0))
+        {
+            return Err("No hours were found for today or yesterday.".to_string());
+        }
+
+        return Ok(TimesheetPreview {
+            title: "Yesterday + today".to_string(),
+            generated_at: generated_label,
+            generated_at_epoch_ms: generated_epoch_ms,
+            sheets: vec![TimesheetPreviewSheet {
+                name: "Yesterday + today".to_string(),
+                columns: vec![
+                    parsed.yesterday_date.format("%a").to_string(),
+                    parsed.today_date.format("%a").to_string(),
+                ],
+                rows: build_rows(&recent_output),
+            }],
+        });
+    }
+
+    if weekly_output.is_empty() {
+        return Err("No hours were found for the selected range.".to_string());
+    }
+
+    let mut sheets = Vec::new();
+    for ((year, week), week_data) in weekly_output {
+        sheets.push(TimesheetPreviewSheet {
+            name: format!("{}-{}", year, week),
+            columns: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                .iter()
+                .map(|value| value.to_string())
+                .collect(),
+            rows: build_rows(&week_data),
+        });
+    }
+
+    Ok(TimesheetPreview {
+        title: "Full timesheet".to_string(),
+        generated_at: generated_label,
+        generated_at_epoch_ms: generated_epoch_ms,
+        sheets,
+    })
+}
+
+pub fn preview(data_dir: &Path, options: TimesheetOptions) -> Result<TimesheetPreview, String> {
+    let parsed = parse_log(data_dir, options.format == TimesheetFormat::Recent)?;
+    build_preview(parsed, options)
+}
