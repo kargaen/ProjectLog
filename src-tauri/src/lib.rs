@@ -12,6 +12,7 @@ mod controllers {
     pub mod timesheet_controller;
 }
 pub mod diagnostics;
+mod infrastructure;
 mod lifecycle;
 mod logger;
 pub mod models;

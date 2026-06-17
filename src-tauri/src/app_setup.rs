@@ -3,7 +3,8 @@ use std::sync::atomic::Ordering;
 
 use tauri::{App, Manager};
 
-use crate::{diagnostics, log, log_warn, logger, projects, settings, tray, AppState};
+use crate::infrastructure::autostart;
+use crate::{diagnostics, log, logger, projects, settings, tray, AppState};
 
 fn migrate_legacy_file(data_dir: &PathBuf, filename: &str) {
     let target = data_dir.join(filename);
@@ -34,26 +35,6 @@ fn migrate_legacy_files(data_dir: &PathBuf) {
     migrate_legacy_file(data_dir, "log.dat");
 }
 
-fn sync_autostart(app: &mut App, open_on_start: bool) {
-    use tauri_plugin_autostart::ManagerExt;
-
-    let autostart_result = if open_on_start {
-        app.autolaunch().enable()
-    } else {
-        app.autolaunch().disable()
-    };
-
-    if let Err(err) = autostart_result {
-        log_warn!(
-            "failed to sync autostart open_on_start={}: {}",
-            open_on_start,
-            err
-        );
-    } else {
-        log!("autostart synced open_on_start={}", open_on_start);
-    }
-}
-
 pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
@@ -72,7 +53,7 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     logger::log_new_entry(&data_dir, "", "");
     tray::setup(app)?;
     log!("tray initialized");
-    sync_autostart(app, open_on_start);
+    autostart::sync_autostart(app, open_on_start);
 
     let handle = app.handle().clone();
     std::thread::spawn(move || {
