@@ -59,6 +59,9 @@ export function createQuickPanelLifecycle(
       await currentWindow
         .setAlwaysOnTop(state.alwaysOnTop)
         .catch(() => {});
+      await currentWindow
+        .setSkipTaskbar(state.alwaysOnTop)
+        .catch(() => {});
       await updateActions.checkForUpdate();
 
       if (state.openOnStart) {

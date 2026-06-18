@@ -28,6 +28,7 @@ export function createSettingsActionsController(
   async function toggleAlwaysOnTop() {
     state.alwaysOnTop = !state.alwaysOnTop;
     await currentWindow.setAlwaysOnTop(state.alwaysOnTop).catch(() => {});
+    await currentWindow.setSkipTaskbar(state.alwaysOnTop).catch(() => {});
     await persistUiSettings();
     log.info("toggleAlwaysOnTop", {
       alwaysOnTop: state.alwaysOnTop,
