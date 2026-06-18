@@ -135,7 +135,7 @@ jobs:
     needs:
       - validate
       - build-windows
-    if: ${{ always() && needs.validate.result == 'success' && needs.build-windows.result == 'success' }}
+    if: ${{ always() && needs.validate.result == 'success' && needs.build-windows.result == 'success' && !contains(needs.validate.outputs.version, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
