@@ -117,6 +117,20 @@ jobs:
         run: cargo test
         working-directory: src-tauri
 
+      - name: Prepare release body
+        id: release_body
+        shell: bash
+        run: |
+          if [[ "${{ contains(needs.validate.outputs.version, '-') }}" == "true" ]]; then
+            echo "body=⚠️ This is a release candidate intended for testing only. It may be unstable. Use at your own risk." >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo 'body<<RELEASE_BODY_EOF'
+              cat CHANGELOG.md
+              echo 'RELEASE_BODY_EOF'
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build installer and upload release assets
         uses: tauri-apps/tauri-action@v0
         env:
@@ -126,7 +140,7 @@ jobs:
         with:
           tagName: ${{ needs.validate.outputs.tag }}
           releaseName: "ProjectLog ${{ needs.validate.outputs.tag }}"
-          releaseBody: "Automated ProjectLog release for ${{ needs.validate.outputs.tag }}. Download the installer assets below."
+          releaseBody: ${{ steps.release_body.outputs.body }}
           releaseDraft: false
           prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
 

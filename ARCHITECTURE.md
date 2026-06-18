@@ -806,3 +806,61 @@ ProjectLog is a dual-surface MVC desktop application:
 - **Two surfaces, one domain** — QuickPanel and tray both call the same controllers and reflect the same committed state
 
 That structure serves one mission: a fast, private, local-only desktop tool for logging what was worked on each day, how long it took, and turning that activity into reliable project-hour output.
+
+---
+
+## Release Process
+
+### Branches
+
+- `master` — release-only. Never commit development work directly here. Only receives merges from `dev` when shipping a release.
+- `dev` — active development branch. All feature branches merge here.
+
+### Versioning
+
+Versions follow `MAJOR.MINOR.PATCH` with an optional numeric-only pre-release suffix (e.g. `2.4.0-1`, `2.4.0-2`). The suffix must be numeric-only because the MSI bundler rejects non-numeric pre-release identifiers.
+
+To bump the version from the repo root:
+
+```
+npm version <new-version>
+```
+
+This updates `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock` atomically in a single commit, then creates a git tag.
+
+### Release Candidates
+
+Tag any version containing `-` from the `dev` branch. The release workflow detects the `-` and marks the GitHub release as a pre-release, which means:
+
+- The installer is available under **GitHub → Releases** (with a "Pre-release" badge)
+- Existing users are **not** notified by the auto-updater (the updater endpoint only serves `releases/latest`)
+- The website is **not** updated
+
+RC builds are triggered manually via `workflow_dispatch` on the `release.yml` workflow targeting `dev`.
+
+### CHANGELOG.md
+
+`CHANGELOG.md` in the repo root accumulates human-written release notes during development. Entries should be added as features and fixes are merged — not retroactively at release time.
+
+**Format** (append new entries at the top, under a `## Unreleased` heading):
+
+```md
+## Unreleased
+
+- Fixed taskbar button not hiding when always-on-top is enabled
+- Rounding is now applied consistently on both preview and export
+```
+
+On release:
+
+1. Rename `## Unreleased` to the release version and date (e.g. `## 2.4.0 — 2026-06-18`)
+2. The release workflow reads `CHANGELOG.md` and uses its content as the GitHub release body
+3. After the release is published, clear `CHANGELOG.md` back to an empty `## Unreleased` heading so new entries can accumulate for the next release
+
+### Shipping a Release
+
+1. Merge `dev` into `master`
+2. Update `CHANGELOG.md` — rename `## Unreleased` to the version + date
+3. Run `npm version <version>` on `master` (no `-` suffix)
+4. Push `master` — the tag push triggers `release.yml`, which builds the installer, publishes the release using `CHANGELOG.md` as the body, and deploys the website
+
