@@ -1,138 +1,15 @@
-use std::fs;
-use std::collections::HashMap;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
-
-use crate::{log, log_debug, log_warn};
-
-fn default_quickpanel_opacity() -> f64 {
-    1.0
-}
-
-fn default_project_sort_mode() -> String {
-    "manual".to_string()
-}
-
-fn default_quickpanel_mode() -> String {
-    "normal".to_string()
-}
-
-fn default_timesheet_rounding_enabled() -> bool {
-    false
-}
-
-fn normalize_opacity(value: f64) -> f64 {
-    value.clamp(0.35, 1.0)
-}
-
-fn normalize_sort_mode(value: &str) -> String {
-    match value {
-        "alphabetical" | "recent" | "manual" => value.to_string(),
-        _ => default_project_sort_mode(),
-    }
-}
-
-fn normalize_quickpanel_mode(value: &str) -> String {
-    match value {
-        "normal" | "compact" => value.to_string(),
-        _ => default_quickpanel_mode(),
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct UiSettings {
-    pub always_on_top: bool,
-    pub open_on_start: bool,
-    pub quickpanel_x: Option<f64>,
-    pub quickpanel_y: Option<f64>,
-    pub quickpanel_width: Option<f64>,
-    pub quickpanel_height: Option<f64>,
-    #[serde(default = "default_quickpanel_opacity")]
-    pub quickpanel_opacity: f64,
-    #[serde(default = "default_project_sort_mode")]
-    pub project_sort_mode: String,
-    #[serde(default = "default_quickpanel_mode")]
-    pub quickpanel_mode: String,
-    #[serde(default)]
-    pub project_manual_order: Vec<String>,
-    #[serde(default)]
-    pub project_recent_usage: HashMap<String, u64>,
-    #[serde(default = "default_timesheet_rounding_enabled")]
-    pub timesheet_rounding_enabled: bool,
-}
-
-impl Default for UiSettings {
-    fn default() -> Self {
-        Self {
-            always_on_top: false,
-            open_on_start: false,
-            quickpanel_x: None,
-            quickpanel_y: None,
-            quickpanel_width: None,
-            quickpanel_height: None,
-            quickpanel_opacity: default_quickpanel_opacity(),
-            project_sort_mode: "manual".to_string(),
-            quickpanel_mode: default_quickpanel_mode(),
-            project_manual_order: Vec::new(),
-            project_recent_usage: HashMap::new(),
-            timesheet_rounding_enabled: default_timesheet_rounding_enabled(),
-        }
-    }
-}
+pub use crate::models::domain::settings::UiSettings;
+use crate::models::repository_traits::settings_repository::SettingsRepository;
+use crate::repositories::file_settings_repository::FileSettingsRepository;
 
 pub fn load(data_dir: &Path) -> UiSettings {
-    let path = data_dir.join("settings.json");
-    if !path.exists() {
-        log!("settings.json missing; using defaults");
-        return UiSettings::default();
-    }
-
-    match fs::read_to_string(&path) {
-        Ok(content) => match serde_json::from_str::<UiSettings>(&content) {
-            Ok(settings) => {
-                log!("loaded settings");
-                UiSettings {
-                    quickpanel_opacity: normalize_opacity(settings.quickpanel_opacity),
-                    project_sort_mode: normalize_sort_mode(&settings.project_sort_mode),
-                    quickpanel_mode: normalize_quickpanel_mode(&settings.quickpanel_mode),
-                    ..settings
-                }
-            }
-            Err(err) => {
-                log_warn!("failed to parse settings.json: {}", err);
-                UiSettings::default()
-            }
-        },
-        Err(err) => {
-            log_warn!("failed to read settings.json: {}", err);
-            UiSettings::default()
-        }
-    }
+    FileSettingsRepository::new(data_dir).load()
 }
 
 pub fn save(data_dir: &Path, settings: &UiSettings) {
-    let path = data_dir.join("settings.json");
-    let temp_path = data_dir.join("settings.json.tmp");
-    let normalized = UiSettings {
-        quickpanel_opacity: normalize_opacity(settings.quickpanel_opacity),
-        project_sort_mode: normalize_sort_mode(&settings.project_sort_mode),
-        quickpanel_mode: normalize_quickpanel_mode(&settings.quickpanel_mode),
-        ..settings.clone()
-    };
-    match serde_json::to_string_pretty(&normalized) {
-        Ok(content) => {
-            if let Err(err) = fs::write(&temp_path, format!("{content}\n")) {
-                log_warn!("failed to save settings.json: {}", err);
-            } else if let Err(err) = fs::rename(&temp_path, &path) {
-                let _ = fs::remove_file(&temp_path);
-                log_warn!("failed to replace settings.json: {}", err);
-            } else {
-                log_debug!("saved settings");
-            }
-        }
-        Err(err) => log_warn!("failed to serialize settings: {}", err),
-    }
+    FileSettingsRepository::new(data_dir).save(settings);
 }
 
 #[cfg(test)]

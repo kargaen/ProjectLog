@@ -2,11 +2,11 @@ import type { Window } from "@tauri-apps/api/window";
 
 import { createLogger } from "../../lib/logger";
 import type { QuickPanelMode, SortMode } from "../../models/types";
-import type { QuickPanelState } from "./quickPanelTypes";
+import type { QuickPanelState } from "../quickpanel/quickPanelTypes";
 
 const log = createLogger("quickpanel.settings");
 
-type CreateQuickPanelSettingsActionsArgs = {
+type CreateSettingsActionsControllerArgs = {
   state: QuickPanelState;
   currentWindow: Window;
   persistUiSettings: () => Promise<void>;
@@ -14,8 +14,8 @@ type CreateQuickPanelSettingsActionsArgs = {
   queueSettingsSave: () => void;
 };
 
-export function createQuickPanelSettingsActions(
-  args: CreateQuickPanelSettingsActionsArgs
+export function createSettingsActionsController(
+  args: CreateSettingsActionsControllerArgs
 ) {
   const {
     state,

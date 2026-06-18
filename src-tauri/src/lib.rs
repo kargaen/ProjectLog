@@ -12,9 +12,13 @@ mod controllers {
     pub mod timesheet_controller;
 }
 pub mod diagnostics;
+mod infrastructure;
 mod lifecycle;
 mod logger;
+pub mod models;
 mod projects;
+mod repositories;
+mod services;
 mod settings;
 mod state;
 mod timesheet;
@@ -111,6 +115,7 @@ mod tests {
             TimesheetOptions {
                 range: TimesheetRange::All,
                 format: TimesheetFormat::Full,
+                rounding_enabled: false,
             }
         );
     }
@@ -124,6 +129,7 @@ mod tests {
             TimesheetOptions {
                 range: TimesheetRange::Today,
                 format: TimesheetFormat::Recent,
+                rounding_enabled: false,
             }
         );
     }

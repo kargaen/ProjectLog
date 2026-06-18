@@ -2,10 +2,13 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use serde::Serialize;
 use tauri::Emitter;
 
-use crate::settings::UiSettings;
+use crate::models::domain::settings::UiSettings;
+
+pub use crate::models::dto::project_state_dto::{
+    ProjectLogState, TimesheetPreviewBootstrap, TimesheetPreviewRequest,
+};
 
 pub struct AppState {
     pub active_project: Mutex<String>,
@@ -33,29 +36,6 @@ impl AppState {
             timesheet_preview_request: Mutex::new(None),
         }
     }
-}
-
-#[derive(Serialize)]
-pub struct ProjectLogState {
-    pub app_version: String,
-    pub active_project: String,
-    pub active_comment: String,
-    pub projects: Vec<String>,
-    pub adhoc_projects: Vec<String>,
-    pub update_available: bool,
-    pub settings: UiSettings,
-}
-
-#[derive(Clone, Serialize)]
-pub struct TimesheetPreviewRequest {
-    pub range: String,
-    pub format: String,
-}
-
-#[derive(Serialize)]
-pub struct TimesheetPreviewBootstrap {
-    pub request: Option<TimesheetPreviewRequest>,
-    pub rounding_enabled: bool,
 }
 
 pub(crate) fn emit_state_changed(app: &tauri::AppHandle) {

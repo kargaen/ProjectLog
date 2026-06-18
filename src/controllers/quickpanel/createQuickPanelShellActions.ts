@@ -15,7 +15,6 @@ type CreateQuickPanelShellActionsArgs = {
   quickPanelBridge: QuickPanelBridge;
   minWindowWidth: number;
   minWindowHeight: number;
-  getCurrentWindowHeight: () => number;
   setCurrentWindowHeight: (value: number) => void;
 };
 

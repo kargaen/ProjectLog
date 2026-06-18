@@ -5,11 +5,11 @@ import type {
 } from "../../models/types";
 import type { QuickPanelBridge } from "../../services/bridge/quickPanelBridge";
 import type { TimesheetBridge } from "../../services/bridge/timesheetBridge";
-import type { QuickPanelState, QuickPanelView } from "./quickPanelTypes";
+import type { QuickPanelState, QuickPanelView } from "../quickpanel/quickPanelTypes";
 
 const log = createLogger("quickpanel.projects");
 
-type CreateQuickPanelProjectActionsArgs = {
+type CreateProjectActionsControllerArgs = {
   state: QuickPanelState;
   view: QuickPanelView;
   quickPanelBridge: QuickPanelBridge;
@@ -23,8 +23,8 @@ type CreateQuickPanelProjectActionsArgs = {
   setManualOrder: (value: string[]) => void;
 };
 
-export function createQuickPanelProjectActions(
-  args: CreateQuickPanelProjectActionsArgs
+export function createProjectActionsController(
+  args: CreateProjectActionsControllerArgs
 ) {
   const {
     state,
