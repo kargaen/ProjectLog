@@ -283,7 +283,71 @@ fn build_preview(parsed: ParsedLog, options: TimesheetOptions) -> Result<Timeshe
     })
 }
 
+fn round_half_preserving_sum(values: &[f64]) -> Vec<f64> {
+    let step = 0.5_f64;
+    let floors: Vec<f64> = values.iter().map(|&v| (v / step).floor() * step).collect();
+    let rounded_total = (values.iter().sum::<f64>() / step).round() * step;
+    let current_total: f64 = floors.iter().sum();
+    let mut increments = ((rounded_total - current_total) / step).round() as i64;
+
+    let mut ranked: Vec<(usize, f64)> = values
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| (i, v - floors[i]))
+        .collect();
+    ranked.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+    });
+
+    let mut result = floors;
+    for &(idx, _) in &ranked {
+        if increments <= 0 {
+            break;
+        }
+        result[idx] += step;
+        increments -= 1;
+    }
+
+    result
+}
+
+fn apply_rounding_to_preview(mut preview: TimesheetPreview) -> TimesheetPreview {
+    for sheet in &mut preview.sheets {
+        for row in sheet.rows.iter_mut() {
+            if row.is_total {
+                continue;
+            }
+            let rounded = round_half_preserving_sum(&row.values);
+            row.total = rounded.iter().sum();
+            row.values = rounded;
+        }
+
+        let value_count = sheet.rows.iter().find(|r| r.is_total).map_or(0, |r| r.values.len());
+        let mut column_totals = vec![0.0_f64; value_count];
+        for row in sheet.rows.iter() {
+            if row.is_total || row.is_comment {
+                continue;
+            }
+            for (i, &v) in row.values.iter().enumerate() {
+                column_totals[i] += v;
+            }
+        }
+        if let Some(total_row) = sheet.rows.iter_mut().find(|r| r.is_total) {
+            total_row.total = column_totals.iter().sum();
+            total_row.values = column_totals;
+        }
+    }
+    preview
+}
+
 pub fn preview(data_dir: &Path, options: TimesheetOptions) -> Result<TimesheetPreview, String> {
     let parsed = parse_log(data_dir, options.format == TimesheetFormat::Recent)?;
-    build_preview(parsed, options)
+    let preview = build_preview(parsed, options)?;
+    if options.rounding_enabled {
+        Ok(apply_rounding_to_preview(preview))
+    } else {
+        Ok(preview)
+    }
 }

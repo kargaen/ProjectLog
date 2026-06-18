@@ -28,6 +28,9 @@ export function createSettingsBridge() {
     saveQuickpanelBounds(input: SaveQuickpanelBoundsInput) {
       return invoke("save_quickpanel_bounds", input);
     },
+    setTimesheetRoundingEnabled(enabled: boolean) {
+      return invoke("set_timesheet_rounding_enabled", { enabled });
+    },
   };
 }
 

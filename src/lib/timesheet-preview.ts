@@ -70,7 +70,7 @@ export function buildTimesheetDisplayRows(
   const valueCount = rows[totalIndex].values.length;
   const columnTotals = new Array<number>(valueCount).fill(0);
   for (const row of rows) {
-    if (row.is_total) continue;
+    if (row.is_total || row.is_comment) continue;
     row.values.forEach((value, index) => {
       columnTotals[index] += value;
     });

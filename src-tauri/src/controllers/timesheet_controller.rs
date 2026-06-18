@@ -23,7 +23,7 @@ pub fn parse_timesheet_options(range: &str, format: &str) -> Result<TimesheetOpt
         return Err("Yesterday + today export only supports the two-day overview.".to_string());
     }
 
-    Ok(TimesheetOptions { range, format })
+    Ok(TimesheetOptions { range, format, rounding_enabled: false })
 }
 
 pub fn generate_timesheet(state: &AppState, app: &AppHandle) -> Result<(), String> {
@@ -94,7 +94,8 @@ pub fn generate_timesheet_export(
     let active = state.active_project.lock().unwrap().clone();
     let comment = state.active_comment.lock().unwrap().clone();
     logger::log_new_entry(&state.data_dir, &active, &comment);
-    let options = parse_timesheet_options(&range, &format)?;
+    let mut options = parse_timesheet_options(&range, &format)?;
+    options.rounding_enabled = state.settings.lock().unwrap().timesheet_rounding_enabled;
 
     match timesheet::generate(&state.data_dir, options) {
         Ok(path) => {

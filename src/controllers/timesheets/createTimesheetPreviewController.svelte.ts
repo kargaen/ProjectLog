@@ -14,6 +14,10 @@ import type {
   TimesheetRange,
 } from "../../models/types";
 import {
+  createSettingsBridge,
+  type SettingsBridge,
+} from "../../services/bridge/settingsBridge";
+import {
   createTimesheetBridge,
   type TimesheetBridge,
 } from "../../services/bridge/timesheetBridge";
@@ -22,6 +26,7 @@ const log = createLogger("timesheet-preview");
 
 type CreateTimesheetPreviewControllerDeps = {
   timesheetBridge?: TimesheetBridge;
+  settingsBridge?: SettingsBridge;
 };
 
 export function createTimesheetPreviewController(
@@ -29,6 +34,8 @@ export function createTimesheetPreviewController(
 ) {
   const timesheetBridge =
     deps.timesheetBridge ?? createTimesheetBridge();
+  const settingsBridge =
+    deps.settingsBridge ?? createSettingsBridge();
   const currentWindow = getCurrentWindow();
 
   const state = $state({
@@ -172,7 +179,7 @@ export function createTimesheetPreviewController(
   async function toggleTimesheetRounding() {
     const next = !state.timesheetRoundingEnabled;
     state.timesheetRoundingEnabled = next;
-    await timesheetBridge.setTimesheetRoundingEnabled(next);
+    await settingsBridge.setTimesheetRoundingEnabled(next);
   }
 
   async function exportTimesheet() {

@@ -15,6 +15,7 @@ pub enum TimesheetFormat {
 pub struct TimesheetOptions {
     pub range: TimesheetRange,
     pub format: TimesheetFormat,
+    pub rounding_enabled: bool,
 }
 
 impl TimesheetOptions {
@@ -23,6 +24,7 @@ impl TimesheetOptions {
         Self {
             range,
             format: TimesheetFormat::Full,
+            rounding_enabled: false,
         }
     }
 
@@ -31,6 +33,7 @@ impl TimesheetOptions {
         Self {
             range: TimesheetRange::Today,
             format: TimesheetFormat::Recent,
+            rounding_enabled: false,
         }
     }
 }

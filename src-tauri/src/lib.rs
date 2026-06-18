@@ -115,6 +115,7 @@ mod tests {
             TimesheetOptions {
                 range: TimesheetRange::All,
                 format: TimesheetFormat::Full,
+                rounding_enabled: false,
             }
         );
     }
@@ -128,6 +129,7 @@ mod tests {
             TimesheetOptions {
                 range: TimesheetRange::Today,
                 format: TimesheetFormat::Recent,
+                rounding_enabled: false,
             }
         );
     }

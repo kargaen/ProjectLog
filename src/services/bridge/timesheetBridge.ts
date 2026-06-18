@@ -24,9 +24,6 @@ export function createTimesheetBridge() {
     hideTimesheetPreviewWindow() {
       return invoke("hide_timesheet_preview_window");
     },
-    setTimesheetRoundingEnabled(enabled: boolean) {
-      return invoke("set_timesheet_rounding_enabled", { enabled });
-    },
     generateTimesheetExport(
       range: TimesheetRange,
       format: TimesheetFormat = "full"
