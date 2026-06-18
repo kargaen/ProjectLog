@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,5 +66,7 @@ const updatedCargoLock = replaceRequired(
   "src-tauri/Cargo.lock"
 );
 fs.writeFileSync(cargoLockPath, updatedCargoLock, "utf8");
+
+execSync(`git add "${cargoTomlPath}" "${cargoLockPath}"`);
 
 console.log(`Synchronized project version to ${targetVersion}`);
