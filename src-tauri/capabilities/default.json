@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Default capabilities for ProjectLog",
-  "windows": ["main"],
+  "windows": ["main", "timesheet-preview"],
   "permissions": [
     "core:default",
     "core:window:allow-hide",

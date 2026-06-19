@@ -120,9 +120,9 @@ pub fn show_timesheet_preview_window(
     if let Some(window) = app.get_webview_window("timesheet-preview") {
         let _ = window.set_title(title);
         let _ = window.set_size(LogicalSize::new(width, height));
-        let _ = window.emit("show-timesheet-preview", request);
         let _ = window.show();
         let _ = window.set_focus();
+        let _ = window.emit("show-timesheet-preview", request);
         return Ok(());
     }
 

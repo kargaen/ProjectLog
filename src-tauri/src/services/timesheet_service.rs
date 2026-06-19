@@ -200,9 +200,6 @@ fn build_preview(parsed: ParsedLog, options: TimesheetOptions) -> Result<Timeshe
         }
 
         let date = entry.timestamp.date();
-        if !include_date(date, options, &parsed) {
-            continue;
-        }
 
         if options.format == TimesheetFormat::Recent {
             if date == parsed.yesterday_date || date == parsed.today_date {
@@ -215,6 +212,10 @@ fn build_preview(parsed: ParsedLog, options: TimesheetOptions) -> Result<Timeshe
                     hours,
                 );
             }
+            continue;
+        }
+
+        if !include_date(date, options, &parsed) {
             continue;
         }
 
