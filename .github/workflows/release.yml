@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Optional version to build, e.g. 2.0.1. Leave empty to use package.json."
+        description: "Optional version to build, e.g. 2.4.0 (stable) or 2.4.0-1 (RC). RC pre-release suffix is always normalized to -1. Leave empty to use package.json."
         required: false
 
 permissions:
@@ -39,8 +39,13 @@ jobs:
 
       - name: Apply workflow-dispatch version
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+        shell: bash
         run: |
-          node scripts/sync-version.mjs "${{ inputs.version }}"
+          VERSION="${{ inputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            VERSION="${VERSION%%-*}-1"
+          fi
+          node scripts/sync-version.mjs "$VERSION"
 
       - name: Check version sync
         shell: bash
@@ -110,8 +115,13 @@ jobs:
 
       - name: Apply workflow-dispatch version
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+        shell: bash
         run: |
-          node scripts/sync-version.mjs "${{ inputs.version }}"
+          VERSION="${{ inputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            VERSION="${VERSION%%-*}-1"
+          fi
+          node scripts/sync-version.mjs "$VERSION"
 
       - name: Test Rust core
         run: cargo test
@@ -130,6 +140,22 @@ jobs:
               echo 'RELEASE_BODY_EOF'
             } >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Delete existing RC releases for this base version
+        if: ${{ contains(needs.validate.outputs.version, '-') }}
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BASE="${{ needs.validate.outputs.version }}"
+          BASE="${BASE%%-*}"
+          gh release list --json tagName,isPrerelease \
+            --jq ".[] | select(.isPrerelease and (.tagName | startswith(\"v${BASE}-\"))) | .tagName" \
+            --limit 50 2>/dev/null \
+            | while IFS= read -r tag; do
+                echo "Deleting old RC: $tag"
+                gh release delete "$tag" --cleanup-tag --yes || true
+              done
 
       - name: Build installer and upload release assets
         uses: tauri-apps/tauri-action@v0
