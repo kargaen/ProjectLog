@@ -44,9 +44,11 @@ pub fn preview_timesheet(
 }
 
 pub fn get_timesheet_preview_bootstrap(state: &AppState) -> TimesheetPreviewBootstrap {
+    let settings = state.settings.lock().unwrap();
     TimesheetPreviewBootstrap {
         request: state.timesheet_preview_request.lock().unwrap().clone(),
-        rounding_enabled: state.settings.lock().unwrap().timesheet_rounding_enabled,
+        rounding_enabled: settings.timesheet_rounding_enabled,
+        ui_font_scale: settings.ui_font_scale,
     }
 }
 

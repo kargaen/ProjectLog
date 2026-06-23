@@ -117,5 +117,6 @@
     onOpenReleaseNotes={controller.openReleaseNotes}
     onCloseUpdatePrompt={controller.closeUpdatePrompt}
     onInstallUpdate={controller.installUpdate}
+    fontScaleIndicator={controller.fontScaleIndicator}
   />
 {/if}

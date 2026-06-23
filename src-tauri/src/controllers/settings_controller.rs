@@ -84,6 +84,18 @@ pub fn set_timesheet_rounding_enabled(enabled: bool, state: &AppState, app: &App
     emit_state_changed(app);
 }
 
+pub fn set_ui_font_scale(scale: f64, state: &AppState, app: &AppHandle) {
+    let clamped = scale.clamp(0.5, 2.0);
+    let mut settings = state.settings.lock().unwrap();
+    if (settings.ui_font_scale - clamped).abs() < f64::EPSILON {
+        return;
+    }
+    settings.ui_font_scale = clamped;
+    settings::save(&state.data_dir, &settings);
+    drop(settings);
+    emit_state_changed(app);
+}
+
 pub fn save_quickpanel_bounds(x: f64, y: f64, width: f64, height: f64, state: &AppState) {
     let mut settings = state.settings.lock().unwrap();
     settings.quickpanel_x = Some(x);

@@ -8,6 +8,7 @@
   import TimesheetHeader from "../components/timesheets/TimesheetHeader.view.svelte";
   import TimesheetStatePanel from "../components/timesheets/TimesheetStatePanel.view.svelte";
   import TimesheetTable from "../components/timesheets/TimesheetTable.view.svelte";
+  import FontScaleIndicator from "../components/shared/FontScaleIndicator.view.svelte";
   import "./timesheet.css";
 
   const controller = createTimesheetPreviewController();
@@ -58,4 +59,9 @@
       body="Open this window from QuickPanel to prepare a timesheet preview."
     />
   {/if}
+
+  <FontScaleIndicator
+    visible={controller.fontScaleIndicator.visible}
+    scale={controller.fontScaleIndicator.scale}
+  />
 </main>

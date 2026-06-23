@@ -7,6 +7,7 @@
   import QuickPanelControls from "../components/quickpanel/QuickPanelControls.view.svelte";
   import QuickPanelHeader from "../components/quickpanel/QuickPanelHeader.view.svelte";
   import ProjectListPanel from "../components/projects/ProjectListPanel.view.svelte";
+  import FontScaleIndicator from "../components/shared/FontScaleIndicator.view.svelte";
 
   type UpdateStatus = "idle" | "available" | "downloading" | "ready";
 
@@ -141,6 +142,7 @@
     onOpenReleaseNotes: () => void | Promise<void>;
     onCloseUpdatePrompt: () => void | Promise<void>;
     onInstallUpdate: () => void | Promise<void>;
+    fontScaleIndicator: { visible: boolean; scale: number };
   } = $props();
 </script>
 
@@ -253,4 +255,9 @@
       onInstallUpdate={onInstallUpdate}
     />
   {/if}
+
+  <FontScaleIndicator
+    visible={fontScaleIndicator.visible}
+    scale={fontScaleIndicator.scale}
+  />
 </main>

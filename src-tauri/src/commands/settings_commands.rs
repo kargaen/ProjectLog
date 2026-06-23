@@ -39,6 +39,11 @@ pub fn set_timesheet_rounding_enabled(
 }
 
 #[tauri::command]
+pub fn set_ui_font_scale(scale: f64, state: State<AppState>, app: tauri::AppHandle) {
+    settings_controller::set_ui_font_scale(scale, &state, &app);
+}
+
+#[tauri::command]
 pub fn save_quickpanel_bounds(x: f64, y: f64, width: f64, height: f64, state: State<AppState>) {
     settings_controller::save_quickpanel_bounds(x, y, width, height, &state);
 }
