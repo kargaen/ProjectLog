@@ -66,6 +66,7 @@ pub fn run() {
             commands::shell_commands::set_update_available,
             commands::settings_commands::save_ui_settings,
             commands::settings_commands::set_timesheet_rounding_enabled,
+            commands::settings_commands::set_ui_font_scale,
             commands::settings_commands::save_quickpanel_bounds,
             commands::shell_commands::log_from_frontend
         ])

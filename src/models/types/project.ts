@@ -20,5 +20,6 @@ export type ProjectState = {
     project_manual_order: string[];
     project_recent_usage: Record<string, number>;
     timesheet_rounding_enabled: boolean;
+    ui_font_scale: number;
   };
 };

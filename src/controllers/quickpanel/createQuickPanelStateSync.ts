@@ -14,6 +14,8 @@ type CreateQuickPanelStateSyncArgs = {
   setRecentProjects: (value: Record<string, number>) => void;
   getTimesheetRoundingEnabled: () => boolean;
   setTimesheetRoundingEnabled: (value: boolean) => void;
+  getUiFontScale: () => number;
+  setUiFontScale: (value: number) => void;
 };
 
 export function createQuickPanelStateSync(
@@ -28,6 +30,8 @@ export function createQuickPanelStateSync(
     setRecentProjects,
     getTimesheetRoundingEnabled,
     setTimesheetRoundingEnabled,
+    getUiFontScale,
+    setUiFontScale,
   } = args;
 
   let ignoredStateChangedEvents = 0;
@@ -77,6 +81,7 @@ export function createQuickPanelStateSync(
     setTimesheetRoundingEnabled(
       nextState.settings.timesheet_rounding_enabled ?? false
     );
+    setUiFontScale(nextState.settings.ui_font_scale ?? 1);
 
     syncManualOrder([
       ...nextState.projects,
@@ -147,6 +152,7 @@ export function createQuickPanelStateSync(
     getManualOrder,
     setManualOrder,
     getRecentProjects,
+    getUiFontScale,
     dispose,
   };
 }

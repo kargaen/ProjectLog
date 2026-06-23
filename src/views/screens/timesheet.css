@@ -1,3 +1,7 @@
+:root {
+  --font-scale: 1;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -30,7 +34,7 @@ body {
   background: #fff;
   color: #20241f;
   padding: 5px 8px;
-  font-size: 11px;
+  font-size: calc(var(--font-scale, 1) * 11px);
   cursor: pointer;
 }
 
@@ -72,13 +76,13 @@ body {
 
 .timesheet-screen .timesheet-window-header h1 {
   color: #21352c;
-  font-size: 20px;
+  font-size: calc(var(--font-scale, 1) * 20px);
 }
 
 .timesheet-screen .timesheet-window-header p {
   margin-top: 4px;
   color: #5f675d;
-  font-size: 12px;
+  font-size: calc(var(--font-scale, 1) * 12px);
 }
 
 .timesheet-screen .timesheet-year-hint {
@@ -103,7 +107,7 @@ body {
   border-radius: 6px;
   background: #e1e9bf;
   color: #405120;
-  font-size: 11px;
+  font-size: calc(var(--font-scale, 1) * 11px);
   text-align: right;
   white-space: nowrap;
 }
@@ -129,13 +133,13 @@ body {
 
 .timesheet-screen .timesheet-preview-loading h1 {
   color: #21352c;
-  font-size: 18px;
+  font-size: calc(var(--font-scale, 1) * 18px);
 }
 
 .timesheet-screen .timesheet-preview-loading p {
   margin-top: 4px;
   color: #5f675d;
-  font-size: 12px;
+  font-size: calc(var(--font-scale, 1) * 12px);
 }
 
 .timesheet-screen .sheet-tabs {
@@ -161,7 +165,7 @@ body {
 .timesheet-screen .timesheet-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: calc(var(--font-scale, 1) * 11px);
   background: #fff;
 }
 
@@ -241,7 +245,7 @@ body {
 
 .timesheet-screen .toggle-row span {
   flex: 1;
-  font-size: 11px;
+  font-size: calc(var(--font-scale, 1) * 11px);
   color: #495047;
 }
 

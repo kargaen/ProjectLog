@@ -23,4 +23,5 @@ pub struct TimesheetPreviewRequest {
 pub struct TimesheetPreviewBootstrap {
     pub request: Option<TimesheetPreviewRequest>,
     pub rounding_enabled: bool,
+    pub ui_font_scale: f64,
 }

@@ -53,6 +53,7 @@ function createEmptyProjectState(): ProjectState {
       project_manual_order: [],
       project_recent_usage: {},
       timesheet_rounding_enabled: false,
+      ui_font_scale: 1,
     },
   };
 }
@@ -99,6 +100,9 @@ export function createQuickPanelController(
   let recentProjects = $state<Record<string, number>>({});
   let manualOrder = $state<string[]>([]);
   let timesheetRoundingEnabled = $state(false);
+  let uiFontScale = $state(1);
+  let fontScaleIndicator = $state({ visible: false, scale: 1 });
+  let fontScaleIndicatorTimer: ReturnType<typeof setTimeout> | undefined;
   let currentWindowHeight = $state(Infinity);
   const stateSync = createQuickPanelStateSync({
     state,
@@ -114,6 +118,10 @@ export function createQuickPanelController(
     getTimesheetRoundingEnabled: () => timesheetRoundingEnabled,
     setTimesheetRoundingEnabled: (value) => {
       timesheetRoundingEnabled = value;
+    },
+    getUiFontScale: () => uiFontScale,
+    setUiFontScale: (value) => {
+      uiFontScale = value;
     },
   });
 
@@ -204,15 +212,30 @@ export function createQuickPanelController(
     state,
     currentWindow,
     quickPanelBridge,
-    stateSync,
+    stateSync: {
+      ...stateSync,
+      getUiFontScale: stateSync.getUiFontScale,
+      setUiFontScale: (value) => {
+        uiFontScale = value;
+      },
+    },
     shellActions,
     dialogActions,
     updateActions,
+    onFontScaleIndicator: (scale) => {
+      fontScaleIndicator = { visible: true, scale };
+      clearTimeout(fontScaleIndicatorTimer);
+      fontScaleIndicatorTimer = setTimeout(() => {
+        fontScaleIndicator = { ...fontScaleIndicator, visible: false };
+      }, 1200);
+    },
   });
 
   return {
     state,
     view,
+    get uiFontScale() { return uiFontScale; },
+    get fontScaleIndicator() { return fontScaleIndicator; },
     mount: lifecycle.mount,
     startWindowDrag: shellActions.startWindowDrag,
     hideWindow: shellActions.hideWindow,

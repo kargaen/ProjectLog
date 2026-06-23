@@ -31,6 +31,9 @@ export function createSettingsBridge() {
     setTimesheetRoundingEnabled(enabled: boolean) {
       return invoke("set_timesheet_rounding_enabled", { enabled });
     },
+    setUiFontScale(scale: number) {
+      return invoke("set_ui_font_scale", { scale });
+    },
   };
 }
 

@@ -11,6 +11,10 @@ import type {
 
 const log = createLogger("quickpanel.lifecycle");
 
+const SCALE_STEP = 0.05;
+const SCALE_MIN = 0.5;
+const SCALE_MAX = 2.0;
+
 type CreateQuickPanelLifecycleArgs = {
   state: QuickPanelState;
   currentWindow: Window;
@@ -19,6 +23,8 @@ type CreateQuickPanelLifecycleArgs = {
     loadState: (options?: { preserveMode?: boolean }) => Promise<void>;
     consumeIgnoredStateChangedEvent: () => boolean;
     dispose: () => void;
+    getUiFontScale: () => number;
+    setUiFontScale: (value: number) => void;
   };
   shellActions: {
     restoreQuickPanelBounds: () => Promise<void>;
@@ -32,6 +38,7 @@ type CreateQuickPanelLifecycleArgs = {
     checkForUpdate: () => Promise<void>;
     openUpdatePrompt: () => Promise<void>;
   };
+  onFontScaleIndicator?: (scale: number) => void;
 };
 
 export function createQuickPanelLifecycle(
@@ -45,6 +52,7 @@ export function createQuickPanelLifecycle(
     shellActions,
     dialogActions,
     updateActions,
+    onFontScaleIndicator,
   } = args;
 
   function mount(options: MountOptions = {}) {
@@ -54,6 +62,10 @@ export function createQuickPanelLifecycle(
     void (async () => {
       log.info("mounted");
       await stateSync.loadState();
+      document.documentElement.style.setProperty(
+        "--font-scale",
+        String(stateSync.getUiFontScale())
+      );
       await shellActions.restoreQuickPanelBounds();
       await shellActions.applyQuickpanelModeLayout();
       await currentWindow
@@ -136,9 +148,25 @@ export function createQuickPanelLifecycle(
         state.closeInputOnSubmit = true;
       });
 
+      function handleWheel(event: WheelEvent) {
+        if (!event.ctrlKey) return;
+        event.preventDefault();
+        const delta = event.deltaY < 0 ? SCALE_STEP : -SCALE_STEP;
+        const next = Math.round(
+          Math.min(SCALE_MAX, Math.max(SCALE_MIN, stateSync.getUiFontScale() + delta)) * 100
+        ) / 100;
+        stateSync.setUiFontScale(next);
+        document.documentElement.style.setProperty("--font-scale", String(next));
+        onFontScaleIndicator?.(next);
+        void quickPanelBridge.setUiFontScale(next).catch(() => {});
+      }
+
+      window.addEventListener("wheel", handleWheel, { passive: false });
+
       cleanup = () => {
         stateSync.dispose();
         clearInterval(interval);
+        window.removeEventListener("wheel", handleWheel);
         void unlistenResized.then((fn) => fn());
         void unlistenInput.then((fn) => fn());
         void unlistenAbout.then((fn) => fn());

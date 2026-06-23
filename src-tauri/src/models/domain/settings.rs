@@ -18,6 +18,10 @@ fn default_timesheet_rounding_enabled() -> bool {
     false
 }
 
+fn default_ui_font_scale() -> f64 {
+    1.0
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UiSettings {
     pub always_on_top: bool,
@@ -38,6 +42,8 @@ pub struct UiSettings {
     pub project_recent_usage: HashMap<String, u64>,
     #[serde(default = "default_timesheet_rounding_enabled")]
     pub timesheet_rounding_enabled: bool,
+    #[serde(default = "default_ui_font_scale")]
+    pub ui_font_scale: f64,
 }
 
 impl Default for UiSettings {
@@ -55,6 +61,7 @@ impl Default for UiSettings {
             project_manual_order: Vec::new(),
             project_recent_usage: HashMap::new(),
             timesheet_rounding_enabled: default_timesheet_rounding_enabled(),
+            ui_font_scale: default_ui_font_scale(),
         }
     }
 }

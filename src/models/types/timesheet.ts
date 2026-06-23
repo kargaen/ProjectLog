@@ -30,4 +30,5 @@ export type TimesheetPreviewRequest = {
 export type TimesheetPreviewBootstrap = {
   request: TimesheetPreviewRequest | null;
   rounding_enabled: boolean;
+  ui_font_scale: number;
 };
