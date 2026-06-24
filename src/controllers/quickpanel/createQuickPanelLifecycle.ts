@@ -57,7 +57,34 @@ export function createQuickPanelLifecycle(
 
   function mount(options: MountOptions = {}) {
     let disposed = false;
-    let cleanup = () => stateSync.dispose();
+
+    let ctrlHeld = false;
+    function handleKeyDown(e: KeyboardEvent) { if (e.key === "Control") ctrlHeld = true; }
+    function handleKeyUp(e: KeyboardEvent) { if (e.key === "Control") ctrlHeld = false; }
+
+    function handleWheel(event: WheelEvent) {
+      if (!event.ctrlKey && !ctrlHeld) return;
+      event.preventDefault();
+      const delta = event.deltaY < 0 ? SCALE_STEP : -SCALE_STEP;
+      const next = Math.round(
+        Math.min(SCALE_MAX, Math.max(SCALE_MIN, stateSync.getUiFontScale() + delta)) * 100
+      ) / 100;
+      stateSync.setUiFontScale(next);
+      document.documentElement.style.setProperty("--font-scale", String(next));
+      onFontScaleIndicator?.(next);
+      void quickPanelBridge.setUiFontScale(next).catch(() => {});
+    }
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    window.addEventListener("keyup", handleKeyUp, { capture: true });
+    window.addEventListener("wheel", handleWheel, { passive: false });
+
+    let cleanup = () => {
+      stateSync.dispose();
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener("keyup", handleKeyUp, { capture: true });
+      window.removeEventListener("wheel", handleWheel);
+    };
 
     void (async () => {
       log.info("mounted");
@@ -74,7 +101,7 @@ export function createQuickPanelLifecycle(
       await currentWindow
         .setSkipTaskbar(state.alwaysOnTop)
         .catch(() => {});
-      await updateActions.checkForUpdate();
+      await updateActions.checkForUpdate().catch(() => {});
 
       if (state.openOnStart) {
         await currentWindow.show().catch(() => {});
@@ -148,24 +175,11 @@ export function createQuickPanelLifecycle(
         state.closeInputOnSubmit = true;
       });
 
-      function handleWheel(event: WheelEvent) {
-        if (!event.ctrlKey) return;
-        event.preventDefault();
-        const delta = event.deltaY < 0 ? SCALE_STEP : -SCALE_STEP;
-        const next = Math.round(
-          Math.min(SCALE_MAX, Math.max(SCALE_MIN, stateSync.getUiFontScale() + delta)) * 100
-        ) / 100;
-        stateSync.setUiFontScale(next);
-        document.documentElement.style.setProperty("--font-scale", String(next));
-        onFontScaleIndicator?.(next);
-        void quickPanelBridge.setUiFontScale(next).catch(() => {});
-      }
-
-      window.addEventListener("wheel", handleWheel, { passive: false });
-
       cleanup = () => {
         stateSync.dispose();
         clearInterval(interval);
+        window.removeEventListener("keydown", handleKeyDown, { capture: true });
+        window.removeEventListener("keyup", handleKeyUp, { capture: true });
         window.removeEventListener("wheel", handleWheel);
         void unlistenResized.then((fn) => fn());
         void unlistenInput.then((fn) => fn());
