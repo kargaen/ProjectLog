@@ -55,6 +55,7 @@ mod tests {
             project_manual_order: vec!["Alpha".to_string(), "Beta".to_string()],
             project_recent_usage: HashMap::from([("Alpha".to_string(), 123)]),
             timesheet_rounding_enabled: true,
+            ui_font_scale: 1.5,
         };
 
         save(&dir, &expected);
@@ -75,6 +76,7 @@ mod tests {
             actual.timesheet_rounding_enabled,
             expected.timesheet_rounding_enabled
         );
+        assert_eq!(actual.ui_font_scale, expected.ui_font_scale);
         let _ = fs::remove_dir_all(dir);
     }
 
