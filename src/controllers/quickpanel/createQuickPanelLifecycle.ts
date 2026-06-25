@@ -116,6 +116,7 @@ export function createQuickPanelLifecycle(
 
       const interval = setInterval(async () => {
         try {
+          if (!(await currentWindow.isVisible().catch(() => false))) return;
           const pos = await currentWindow.outerPosition();
           const size = await currentWindow.outerSize();
           const next = `${pos.x}:${pos.y}:${size.width}:${size.height}`;
