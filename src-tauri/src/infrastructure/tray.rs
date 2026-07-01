@@ -120,11 +120,15 @@ fn handle_generate(app: &AppHandle, mode: &str) {
         "recent" => ("today", "recent"),
         _ => return,
     };
-    let _ = timesheet_controller::open_timesheet_preview_window(
-        range.to_string(),
-        format.to_string(),
-        app,
-    );
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = timesheet_controller::open_timesheet_preview_window(
+            range.to_string(),
+            format.to_string(),
+            &app,
+        )
+        .await;
+    });
 }
 
 fn handle_reset_sheet(app: &AppHandle) {
