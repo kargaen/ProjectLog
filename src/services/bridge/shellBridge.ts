@@ -11,8 +11,8 @@ export function createShellBridge() {
     openDiagnosticLog() {
       return invoke("open_diagnostic_log");
     },
-    openFeedback() {
-      return invoke("open_feedback");
+    openGithubIssues() {
+      return invoke("open_github_issues");
     },
     openProjectHomepage() {
       return invoke("open_project_homepage");

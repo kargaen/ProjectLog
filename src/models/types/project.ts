@@ -21,5 +21,8 @@ export type ProjectState = {
     project_recent_usage: Record<string, number>;
     timesheet_rounding_enabled: boolean;
     ui_font_scale: number;
+    project_colors: Record<string, string>;
+    project_groups: Record<string, string>;
+    group_projects_enabled: boolean;
   };
 };

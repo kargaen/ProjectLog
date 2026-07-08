@@ -28,17 +28,6 @@ pub fn open_diagnostic_log(state: &AppState, app: &AppHandle) -> Result<(), Stri
     open_path(&log_path, app)
 }
 
-pub fn open_feedback(app: &AppHandle) -> Result<(), String> {
-    log!("open_feedback mailto");
-    use tauri_plugin_opener::OpenerExt;
-    app.opener()
-        .open_url(
-            "mailto:karga@karga.dk?subject=ProjectLog%20feedback&body=Hello%2C%0A%0AI%20have%20ProjectLog%20feedback%3A%0A",
-            None::<&str>,
-        )
-        .map_err(|e| e.to_string())
-}
-
 pub fn open_github_issues(app: &AppHandle) -> Result<(), String> {
     log!("open_github_issues");
     use tauri_plugin_opener::OpenerExt;

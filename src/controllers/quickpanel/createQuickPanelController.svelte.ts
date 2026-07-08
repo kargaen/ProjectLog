@@ -15,6 +15,7 @@ import {
   type TimesheetBridge,
 } from "../../services/bridge/timesheetBridge";
 import { createProjectActionsController } from "../projects/createProjectActionsController";
+import { createProjectContextMenuController } from "../projects/createProjectContextMenuController";
 import { createSettingsActionsController } from "../settings/createSettingsActionsController";
 import { createQuickPanelDialogActions } from "./createQuickPanelDialogActions";
 import { createQuickPanelLifecycle } from "./createQuickPanelLifecycle";
@@ -54,6 +55,9 @@ function createEmptyProjectState(): ProjectState {
       project_recent_usage: {},
       timesheet_rounding_enabled: false,
       ui_font_scale: 1,
+      project_colors: {},
+      project_groups: {},
+      group_projects_enabled: false,
     },
   };
 }
@@ -88,6 +92,8 @@ export function createQuickPanelController(
     draggedProject: null as string | null,
     dropTargetProject: null as string | null,
     dropPosition: "before" as "before" | "after",
+    contextMenuProject: null as string | null,
+    contextMenuPosition: null as { x: number; y: number } | null,
     dialogOpen: false,
     dialogMode: "",
     aboutOpen: false,
@@ -103,6 +109,9 @@ export function createQuickPanelController(
   let uiFontScale = $state(1);
   let fontScaleIndicator = $state({ visible: false, scale: 1 });
   let fontScaleIndicatorTimer: ReturnType<typeof setTimeout> | undefined;
+  let projectColors = $state<Record<string, string>>({});
+  let projectGroups = $state<Record<string, string>>({});
+  let groupProjectsEnabled = $state(false);
   let currentWindowHeight = $state(Infinity);
   const stateSync = createQuickPanelStateSync({
     state,
@@ -123,7 +132,24 @@ export function createQuickPanelController(
     setUiFontScale: (value) => {
       uiFontScale = value;
     },
+    getProjectColors: () => projectColors,
+    setProjectColors: (value) => {
+      projectColors = value;
+    },
+    getProjectGroups: () => projectGroups,
+    setProjectGroups: (value) => {
+      projectGroups = value;
+    },
+    getGroupProjectsEnabled: () => groupProjectsEnabled,
+    setGroupProjectsEnabled: (value) => {
+      groupProjectsEnabled = value;
+    },
   });
+
+  function toggleGroupProjectsEnabled() {
+    groupProjectsEnabled = !groupProjectsEnabled;
+    stateSync.queueSettingsSave();
+  }
 
   const view = {
     get minOpacity() {
@@ -161,6 +187,52 @@ export function createQuickPanelController(
         .getManualOrder()
         .filter((project) => combined.includes(project));
     },
+    get projectColors() {
+      return stateSync.getProjectColors();
+    },
+    get projectGroups() {
+      return stateSync.getProjectGroups();
+    },
+    get groupProjectsEnabled() {
+      return stateSync.getGroupProjectsEnabled();
+    },
+    get knownGroupNames() {
+      const groups = stateSync.getProjectGroups();
+      return [...new Set(Object.values(groups))].sort((a, b) =>
+        a.localeCompare(b)
+      );
+    },
+    get groupedProjects() {
+      const ordered = this.allProjects;
+      if (!this.groupProjectsEnabled) {
+        return [{ groupName: null as string | null, projects: ordered }];
+      }
+
+      const groups = stateSync.getProjectGroups();
+      const buckets = new Map<string | null, string[]>();
+      for (const project of ordered) {
+        const groupName = groups[project] ?? null;
+        const bucket = buckets.get(groupName);
+        if (bucket) {
+          bucket.push(project);
+        } else {
+          buckets.set(groupName, [project]);
+        }
+      }
+
+      const ungrouped = buckets.get(null) ?? [];
+      buckets.delete(null);
+      const namedGroups = [...buckets.entries()]
+        .sort(([a], [b]) => (a as string).localeCompare(b as string))
+        .map(([groupName, projects]) => ({ groupName, projects }));
+
+      const result: { groupName: string | null; projects: string[] }[] = [];
+      if (ungrouped.length > 0) {
+        result.push({ groupName: null, projects: ungrouped });
+      }
+      result.push(...namedGroups);
+      return result;
+    },
   } as QuickPanelView;
 
   const shellActions = createQuickPanelShellActions({
@@ -197,6 +269,12 @@ export function createQuickPanelController(
     state,
     quickPanelBridge,
     loadState: stateSync.loadState,
+  });
+
+  const projectContextMenuActions = createProjectContextMenuController({
+    state,
+    quickPanelBridge,
+    refreshFromCommand: stateSync.refreshFromCommand,
   });
 
   const updateActions = createQuickPanelUpdateActions({
@@ -271,9 +349,15 @@ export function createQuickPanelController(
     handleDragOver: projectActions.handleDragOver,
     finishDrag: projectActions.finishDrag,
     openDiagnosticLog: dialogActions.openDiagnosticLog,
-    openFeedback: dialogActions.openFeedback,
+    openGithubIssues: dialogActions.openGithubIssues,
     openProjectHomepage: dialogActions.openProjectHomepage,
     openPortfolio: dialogActions.openPortfolio,
     openReleaseNotes: dialogActions.openReleaseNotes,
+    toggleGroupProjectsEnabled,
+    openProjectContextMenu: projectContextMenuActions.openContextMenu,
+    closeProjectContextMenu: projectContextMenuActions.closeContextMenu,
+    pickProjectColor: projectContextMenuActions.pickColor,
+    pickProjectGroup: projectContextMenuActions.pickGroup,
+    requestNewProjectGroup: projectContextMenuActions.requestNewGroup,
   };
 }

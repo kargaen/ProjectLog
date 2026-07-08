@@ -2,14 +2,14 @@
   let {
     version,
     onOpenProjectHomepage,
-    onOpenFeedback,
+    onOpenGithubIssues,
     onOpenPortfolio,
     onOpenDiagnosticLog,
     onClose,
   }: {
     version: string;
     onOpenProjectHomepage: () => void | Promise<void>;
-    onOpenFeedback: () => void | Promise<void>;
+    onOpenGithubIssues: () => void | Promise<void>;
     onOpenPortfolio: () => void | Promise<void>;
     onOpenDiagnosticLog: () => void | Promise<void>;
     onClose: () => void | Promise<void>;
@@ -37,13 +37,13 @@
       </a>
       <span> | </span>
       <a
-        href="mailto:karga@karga.dk"
+        href="https://github.com/kargaen/ProjectLog/issues"
         onclick={(event) => {
           event.preventDefault();
-          onOpenFeedback();
+          onOpenGithubIssues();
         }}
       >
-        Send feedback by mail
+        Report an issue
       </a>
       <span> | </span>
       <a

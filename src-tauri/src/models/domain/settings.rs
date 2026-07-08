@@ -22,6 +22,10 @@ fn default_ui_font_scale() -> f64 {
     1.0
 }
 
+fn default_group_projects_enabled() -> bool {
+    false
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UiSettings {
     pub always_on_top: bool,
@@ -44,6 +48,12 @@ pub struct UiSettings {
     pub timesheet_rounding_enabled: bool,
     #[serde(default = "default_ui_font_scale")]
     pub ui_font_scale: f64,
+    #[serde(default)]
+    pub project_colors: HashMap<String, String>,
+    #[serde(default)]
+    pub project_groups: HashMap<String, String>,
+    #[serde(default = "default_group_projects_enabled")]
+    pub group_projects_enabled: bool,
 }
 
 impl Default for UiSettings {
@@ -62,6 +72,9 @@ impl Default for UiSettings {
             project_recent_usage: HashMap::new(),
             timesheet_rounding_enabled: default_timesheet_rounding_enabled(),
             ui_font_scale: default_ui_font_scale(),
+            project_colors: HashMap::new(),
+            project_groups: HashMap::new(),
+            group_projects_enabled: default_group_projects_enabled(),
         }
     }
 }

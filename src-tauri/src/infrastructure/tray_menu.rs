@@ -220,22 +220,13 @@ pub fn build_menu(app: &AppHandle) -> Result<Menu<Wry>, Box<dyn std::error::Erro
 
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
-    let feedback_sub = Submenu::with_id(app, "feedback_menu", "Feedback", true)?;
-    feedback_sub.append(&MenuItem::with_id(
-        app,
-        "feedback_email",
-        "Send feedback...",
-        true,
-        None::<&str>,
-    )?)?;
-    feedback_sub.append(&MenuItem::with_id(
+    menu.append(&MenuItem::with_id(
         app,
         "feedback_github",
-        "GitHub issues...",
+        "Report an issue...",
         true,
         None::<&str>,
     )?)?;
-    menu.append(&feedback_sub)?;
 
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 

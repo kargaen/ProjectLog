@@ -12,6 +12,9 @@ pub fn save_ui_settings(
     project_manual_order: Vec<String>,
     project_recent_usage: std::collections::HashMap<String, u64>,
     timesheet_rounding_enabled: bool,
+    project_colors: std::collections::HashMap<String, String>,
+    project_groups: std::collections::HashMap<String, String>,
+    group_projects_enabled: bool,
     state: State<AppState>,
     app: tauri::AppHandle,
 ) {
@@ -24,9 +27,32 @@ pub fn save_ui_settings(
         project_manual_order,
         project_recent_usage,
         timesheet_rounding_enabled,
+        project_colors,
+        project_groups,
+        group_projects_enabled,
         &state,
         &app,
     );
+}
+
+#[tauri::command]
+pub fn set_project_color(
+    project: String,
+    color: Option<String>,
+    state: State<AppState>,
+    app: tauri::AppHandle,
+) {
+    settings_controller::set_project_color(project, color, &state, &app);
+}
+
+#[tauri::command]
+pub fn set_project_group(
+    project: String,
+    group: Option<String>,
+    state: State<AppState>,
+    app: tauri::AppHandle,
+) {
+    settings_controller::set_project_group(project, group, &state, &app);
 }
 
 #[tauri::command]

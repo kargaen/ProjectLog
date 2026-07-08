@@ -62,7 +62,6 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             "reset_projects" => handle_reset_projects(app),
             "open_log" => handle_open_log(app),
             "open_diagnostic_log" => handle_open_diagnostic_log(app),
-            "feedback_email" => handle_feedback_email(app),
             "feedback_github" => handle_feedback_github(app),
             "about" => handle_about(app),
             "exit" => handle_exit(app),
@@ -175,10 +174,6 @@ fn handle_open_diagnostic_log(app: &AppHandle) {
     log!("tray open diagnostic log");
     let state = app.state::<AppState>();
     let _ = shell_controller::open_diagnostic_log(&state, app);
-}
-
-fn handle_feedback_email(app: &AppHandle) {
-    let _ = shell_controller::open_feedback(app);
 }
 
 fn handle_feedback_github(app: &AppHandle) {

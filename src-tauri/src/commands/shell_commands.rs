@@ -13,11 +13,6 @@ pub fn open_diagnostic_log(state: State<AppState>, app: tauri::AppHandle) -> Res
 }
 
 #[tauri::command]
-pub fn open_feedback(app: tauri::AppHandle) -> Result<(), String> {
-    shell_controller::open_feedback(&app)
-}
-
-#[tauri::command]
 pub fn open_github_issues(app: tauri::AppHandle) -> Result<(), String> {
     shell_controller::open_github_issues(&app)
 }

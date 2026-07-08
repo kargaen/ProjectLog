@@ -11,6 +11,9 @@ export type SaveUiSettingsInput = {
   projectManualOrder: string[];
   projectRecentUsage: Record<string, number>;
   timesheetRoundingEnabled: boolean;
+  projectColors: Record<string, string>;
+  projectGroups: Record<string, string>;
+  groupProjectsEnabled: boolean;
 };
 
 export type SaveQuickpanelBoundsInput = {
@@ -33,6 +36,12 @@ export function createSettingsBridge() {
     },
     setUiFontScale(scale: number) {
       return invoke("set_ui_font_scale", { scale });
+    },
+    setProjectColor(project: string, color: string | null) {
+      return invoke("set_project_color", { project, color });
+    },
+    setProjectGroup(project: string, group: string | null) {
+      return invoke("set_project_group", { project, group });
     },
   };
 }

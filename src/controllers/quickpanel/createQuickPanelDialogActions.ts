@@ -1,3 +1,4 @@
+import { NEW_GROUP_DIALOG_PREFIX } from "../projects/createProjectContextMenuController";
 import type { QuickPanelBridge } from "../../services/bridge/quickPanelBridge";
 import type { QuickPanelState } from "./quickPanelTypes";
 
@@ -13,10 +14,18 @@ export function createQuickPanelDialogActions(
   const { state, quickPanelBridge, loadState } = args;
 
   async function submitDialog() {
-    await quickPanelBridge.submitInput(
-      state.dialogMode,
-      state.dialogValue.trim()
-    );
+    const mode = state.dialogMode;
+    const value = state.dialogValue.trim();
+
+    if (mode.startsWith(NEW_GROUP_DIALOG_PREFIX)) {
+      const project = mode.slice(NEW_GROUP_DIALOG_PREFIX.length);
+      if (value && project) {
+        await quickPanelBridge.setProjectGroup(project, value);
+      }
+    } else {
+      await quickPanelBridge.submitInput(mode, value);
+    }
+
     state.dialogOpen = false;
     state.dialogMode = "";
     state.dialogValue = "";
@@ -50,14 +59,19 @@ export function createQuickPanelDialogActions(
     if (state.dialogOpen && event.key === "Escape") {
       cancelDialog();
     }
+
+    if (state.contextMenuProject && event.key === "Escape") {
+      state.contextMenuProject = null;
+      state.contextMenuPosition = null;
+    }
   }
 
   async function openDiagnosticLog() {
     await quickPanelBridge.openDiagnosticLog();
   }
 
-  async function openFeedback() {
-    await quickPanelBridge.openFeedback();
+  async function openGithubIssues() {
+    await quickPanelBridge.openGithubIssues();
   }
 
   async function openProjectHomepage() {
@@ -80,7 +94,7 @@ export function createQuickPanelDialogActions(
     setDialogValue,
     handleGlobalKeydown,
     openDiagnosticLog,
-    openFeedback,
+    openGithubIssues,
     openProjectHomepage,
     openPortfolio,
     openReleaseNotes,

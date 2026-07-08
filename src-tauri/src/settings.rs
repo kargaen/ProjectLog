@@ -56,6 +56,9 @@ mod tests {
             project_recent_usage: HashMap::from([("Alpha".to_string(), 123)]),
             timesheet_rounding_enabled: true,
             ui_font_scale: 1.5,
+            project_colors: HashMap::from([("Alpha".to_string(), "#267a62".to_string())]),
+            project_groups: HashMap::from([("Alpha".to_string(), "Work".to_string())]),
+            group_projects_enabled: true,
         };
 
         save(&dir, &expected);
@@ -77,6 +80,12 @@ mod tests {
             expected.timesheet_rounding_enabled
         );
         assert_eq!(actual.ui_font_scale, expected.ui_font_scale);
+        assert_eq!(actual.project_colors, expected.project_colors);
+        assert_eq!(actual.project_groups, expected.project_groups);
+        assert_eq!(
+            actual.group_projects_enabled,
+            expected.group_projects_enabled
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

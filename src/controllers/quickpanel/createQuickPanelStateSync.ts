@@ -16,6 +16,12 @@ type CreateQuickPanelStateSyncArgs = {
   setTimesheetRoundingEnabled: (value: boolean) => void;
   getUiFontScale: () => number;
   setUiFontScale: (value: number) => void;
+  getProjectColors: () => Record<string, string>;
+  setProjectColors: (value: Record<string, string>) => void;
+  getProjectGroups: () => Record<string, string>;
+  setProjectGroups: (value: Record<string, string>) => void;
+  getGroupProjectsEnabled: () => boolean;
+  setGroupProjectsEnabled: (value: boolean) => void;
 };
 
 export function createQuickPanelStateSync(
@@ -32,6 +38,12 @@ export function createQuickPanelStateSync(
     setTimesheetRoundingEnabled,
     getUiFontScale,
     setUiFontScale,
+    getProjectColors,
+    setProjectColors,
+    getProjectGroups,
+    setProjectGroups,
+    getGroupProjectsEnabled,
+    setGroupProjectsEnabled,
   } = args;
 
   let ignoredStateChangedEvents = 0;
@@ -82,6 +94,9 @@ export function createQuickPanelStateSync(
       nextState.settings.timesheet_rounding_enabled ?? false
     );
     setUiFontScale(nextState.settings.ui_font_scale ?? 1);
+    setProjectColors(nextState.settings.project_colors ?? {});
+    setProjectGroups(nextState.settings.project_groups ?? {});
+    setGroupProjectsEnabled(nextState.settings.group_projects_enabled ?? false);
 
     syncManualOrder([
       ...nextState.projects,
@@ -115,6 +130,9 @@ export function createQuickPanelStateSync(
       projectManualOrder: getManualOrder(),
       projectRecentUsage: getRecentProjects(),
       timesheetRoundingEnabled: getTimesheetRoundingEnabled(),
+      projectColors: getProjectColors(),
+      projectGroups: getProjectGroups(),
+      groupProjectsEnabled: getGroupProjectsEnabled(),
     });
   }
 
@@ -153,6 +171,9 @@ export function createQuickPanelStateSync(
     setManualOrder,
     getRecentProjects,
     getUiFontScale,
+    getProjectColors,
+    getProjectGroups,
+    getGroupProjectsEnabled,
     dispose,
   };
 }

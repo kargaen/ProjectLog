@@ -58,7 +58,6 @@ pub fn run() {
             commands::project_commands::reset_projects,
             commands::shell_commands::open_log_file,
             commands::shell_commands::open_diagnostic_log,
-            commands::shell_commands::open_feedback,
             commands::shell_commands::open_github_issues,
             commands::shell_commands::open_portfolio,
             commands::shell_commands::open_project_homepage,
@@ -68,6 +67,8 @@ pub fn run() {
             commands::settings_commands::set_timesheet_rounding_enabled,
             commands::settings_commands::set_ui_font_scale,
             commands::settings_commands::save_quickpanel_bounds,
+            commands::settings_commands::set_project_color,
+            commands::settings_commands::set_project_group,
             commands::shell_commands::log_from_frontend
         ])
         .on_window_event(lifecycle::handle_window_event)

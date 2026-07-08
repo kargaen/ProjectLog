@@ -14,6 +14,9 @@ pub fn save_ui_settings(
     project_manual_order: Vec<String>,
     project_recent_usage: HashMap<String, u64>,
     timesheet_rounding_enabled: bool,
+    project_colors: HashMap<String, String>,
+    project_groups: HashMap<String, String>,
+    group_projects_enabled: bool,
     state: &AppState,
     app: &AppHandle,
 ) {
@@ -45,6 +48,9 @@ pub fn save_ui_settings(
         || settings.open_on_start != open_on_start
         || (settings.quickpanel_opacity - normalized_opacity).abs() > f64::EPSILON
         || settings.timesheet_rounding_enabled != timesheet_rounding_enabled
+        || settings.project_colors != project_colors
+        || settings.project_groups != project_groups
+        || settings.group_projects_enabled != group_projects_enabled
         || tray_needs_rebuild;
 
     if !changed {
@@ -60,6 +66,9 @@ pub fn save_ui_settings(
     settings.project_manual_order = project_manual_order;
     settings.project_recent_usage = project_recent_usage;
     settings.timesheet_rounding_enabled = timesheet_rounding_enabled;
+    settings.project_colors = project_colors;
+    settings.project_groups = project_groups;
+    settings.group_projects_enabled = group_projects_enabled;
     settings::save(&state.data_dir, &settings);
     if open_on_start {
         let _ = app.autolaunch().enable();
@@ -103,6 +112,36 @@ pub fn save_quickpanel_bounds(x: f64, y: f64, width: f64, height: f64, state: &A
     settings.quickpanel_width = Some(width);
     settings.quickpanel_height = Some(height);
     settings::save(&state.data_dir, &settings);
+}
+
+pub fn set_project_color(project: String, color: Option<String>, state: &AppState, app: &AppHandle) {
+    let mut settings = state.settings.lock().unwrap();
+    match color {
+        Some(color) => {
+            settings.project_colors.insert(project, color);
+        }
+        None => {
+            settings.project_colors.remove(&project);
+        }
+    }
+    settings::save(&state.data_dir, &settings);
+    drop(settings);
+    emit_state_changed(app);
+}
+
+pub fn set_project_group(project: String, group: Option<String>, state: &AppState, app: &AppHandle) {
+    let mut settings = state.settings.lock().unwrap();
+    match group {
+        Some(group) => {
+            settings.project_groups.insert(project, group);
+        }
+        None => {
+            settings.project_groups.remove(&project);
+        }
+    }
+    settings::save(&state.data_dir, &settings);
+    drop(settings);
+    emit_state_changed(app);
 }
 
 pub fn set_quickpanel_mode(mode: &str, state: &AppState, app: &AppHandle) {

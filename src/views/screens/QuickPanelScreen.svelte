@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SortMode } from "../../models/types";
+  import type { ProjectGroupBucket } from "../../controllers/quickpanel/quickPanelTypes";
   import AboutDialog from "../components/dialogs/AboutDialog.view.svelte";
   import InputDialog from "../components/dialogs/InputDialog.view.svelte";
   import UpdateDialog from "../components/dialogs/UpdateDialog.view.svelte";
@@ -18,6 +19,13 @@
     appVersion,
     permanentProjects,
     allProjects,
+    groupedProjects,
+    groupProjectsEnabled,
+    knownGroupNames,
+    projectColors,
+    projectGroups,
+    contextMenuProject,
+    contextMenuPosition,
     sortMode,
     effectiveSortMode,
     isCompactLayout,
@@ -42,11 +50,17 @@
     onStartDrag,
     onHide,
     onSetSortMode,
+    onToggleGroupProjectsEnabled,
     onHandleDragOver,
     onHandleDragStart,
     onSelectProject,
     onRemoveProject,
     onSaveAdhocProject,
+    onOpenContextMenu,
+    onCloseContextMenu,
+    onPickColor,
+    onPickGroup,
+    onRequestNewGroup,
     onCommentTextChange,
     onSaveComment,
     onClearComment,
@@ -67,7 +81,7 @@
     onCancelDialog,
     onSubmitDialog,
     onOpenProjectHomepage,
-    onOpenFeedback,
+    onOpenGithubIssues,
     onOpenPortfolio,
     onOpenDiagnosticLog,
     onCloseAbout,
@@ -82,6 +96,13 @@
     appVersion: string;
     permanentProjects: string[];
     allProjects: string[];
+    groupedProjects: ProjectGroupBucket[];
+    groupProjectsEnabled: boolean;
+    knownGroupNames: string[];
+    projectColors: Record<string, string>;
+    projectGroups: Record<string, string>;
+    contextMenuProject: string | null;
+    contextMenuPosition: { x: number; y: number } | null;
     sortMode: SortMode;
     effectiveSortMode: SortMode;
     isCompactLayout: boolean;
@@ -106,11 +127,17 @@
     onStartDrag: () => void | Promise<void>;
     onHide: () => void | Promise<void>;
     onSetSortMode: (mode: SortMode) => void;
+    onToggleGroupProjectsEnabled: () => void;
     onHandleDragOver: (event: MouseEvent, project: string) => void;
     onHandleDragStart: (project: string) => void;
     onSelectProject: (project: string) => void | Promise<void>;
     onRemoveProject: (project: string) => void | Promise<void>;
     onSaveAdhocProject: (project: string) => void | Promise<void>;
+    onOpenContextMenu: (project: string, x: number, y: number) => void;
+    onCloseContextMenu: () => void;
+    onPickColor: (color: string | null) => void | Promise<void>;
+    onPickGroup: (group: string | null) => void | Promise<void>;
+    onRequestNewGroup: () => void;
     onCommentTextChange: (value: string) => void;
     onSaveComment: () => void | Promise<void>;
     onClearComment: () => void | Promise<void>;
@@ -134,7 +161,7 @@
     onCancelDialog: () => void | Promise<void>;
     onSubmitDialog: () => void | Promise<void>;
     onOpenProjectHomepage: () => void | Promise<void>;
-    onOpenFeedback: () => void | Promise<void>;
+    onOpenGithubIssues: () => void | Promise<void>;
     onOpenPortfolio: () => void | Promise<void>;
     onOpenDiagnosticLog: () => void | Promise<void>;
     onCloseAbout: () => void | Promise<void>;
@@ -177,18 +204,31 @@
     {isCompactLayout}
     {sortMode}
     {allProjects}
+    {groupedProjects}
+    {groupProjectsEnabled}
+    {knownGroupNames}
+    {projectColors}
+    {projectGroups}
     {activeProject}
     {permanentProjects}
     {effectiveSortMode}
     {draggedProject}
     {dropTargetProject}
     {dropPosition}
+    {contextMenuProject}
+    {contextMenuPosition}
     onSetSortMode={onSetSortMode}
+    onToggleGroupProjectsEnabled={onToggleGroupProjectsEnabled}
     onHandleDragOver={onHandleDragOver}
     onHandleDragStart={onHandleDragStart}
     onSelectProject={onSelectProject}
     onRemoveProject={onRemoveProject}
     onSaveAdhocProject={onSaveAdhocProject}
+    onOpenContextMenu={onOpenContextMenu}
+    onCloseContextMenu={onCloseContextMenu}
+    onPickColor={onPickColor}
+    onPickGroup={onPickGroup}
+    onRequestNewGroup={onRequestNewGroup}
   />
 
   {#if !isCompactLayout}
@@ -238,7 +278,7 @@
     <AboutDialog
       version={appVersion}
       onOpenProjectHomepage={onOpenProjectHomepage}
-      onOpenFeedback={onOpenFeedback}
+      onOpenGithubIssues={onOpenGithubIssues}
       onOpenPortfolio={onOpenPortfolio}
       onOpenDiagnosticLog={onOpenDiagnosticLog}
       onClose={onCloseAbout}

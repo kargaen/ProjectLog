@@ -30,6 +30,8 @@ export type QuickPanelState = {
   draggedProject: string | null;
   dropTargetProject: string | null;
   dropPosition: "before" | "after";
+  contextMenuProject: string | null;
+  contextMenuPosition: { x: number; y: number } | null;
   dialogOpen: boolean;
   dialogMode: string;
   aboutOpen: boolean;
@@ -38,9 +40,19 @@ export type QuickPanelState = {
   closeInputOnSubmit: boolean;
 };
 
+export type ProjectGroupBucket = {
+  groupName: string | null;
+  projects: string[];
+};
+
 export type QuickPanelView = {
   readonly minOpacity: number;
   readonly isCompactLayout: boolean;
   readonly effectiveSortMode: SortMode;
   readonly allProjects: string[];
+  readonly projectColors: Record<string, string>;
+  readonly projectGroups: Record<string, string>;
+  readonly groupProjectsEnabled: boolean;
+  readonly knownGroupNames: string[];
+  readonly groupedProjects: ProjectGroupBucket[];
 };
