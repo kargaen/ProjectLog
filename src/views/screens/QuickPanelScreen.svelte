@@ -89,6 +89,7 @@
     onOpenReleaseNotes,
     onCloseUpdatePrompt,
     onInstallUpdate,
+    fontScaleIndicator,
   }: {
     appIcon: string;
     activeProject: string;
