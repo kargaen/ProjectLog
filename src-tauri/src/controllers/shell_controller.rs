@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, WebviewWindowBuilder};
 
 use crate::{
     emit_state_changed, log, tray, AppState, TimesheetPreviewRequest,
@@ -62,16 +62,6 @@ pub fn open_release_notes(app: &AppHandle) -> Result<(), String> {
 
 pub fn show_quickpanel(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        {
-            let state = app.state::<AppState>();
-            let settings = state.settings.lock().unwrap();
-            if let (Some(w), Some(h)) = (settings.quickpanel_width, settings.quickpanel_height) {
-                let _ = window.set_size(PhysicalSize::new(w.round() as u32, h.round() as u32));
-            }
-            if let (Some(x), Some(y)) = (settings.quickpanel_x, settings.quickpanel_y) {
-                let _ = window.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
-            }
-        }
         let _ = window.show();
         let _ = window.set_focus();
     }
