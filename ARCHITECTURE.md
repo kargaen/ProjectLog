@@ -5,6 +5,18 @@ See [`README.md`](./README.md) for the full mission statement and product overvi
 
 ---
 
+## North Star
+
+ProjectLog is a frictionless time-tracking companion: always there, never in the way — a clock punch card that follows you through the day without ever interrupting it.
+
+When the phone rings about an important project you weren't expecting, while you were deep in something else, ProjectLog is ready to mark the moment the call started — just by saying the word.
+
+When you're juggling seventeen ongoing projects and your boss wants that overdue timesheet, ProjectLog can tell you, with surgical accuracy, exactly how much time you spent on what, weeks back.
+
+Every decision in this document exists to protect that: minimal friction to log a moment, and unshakeable trust in what gets reconstructed from it later. An epic that trades either away — that adds friction to the moment of logging, or weakens the reconstructed record's accuracy — erodes the north star and must say so plainly.
+
+---
+
 ## Write Policy
 
 This document is sharded across `architecture/constitution/` and `architecture/description/`.
