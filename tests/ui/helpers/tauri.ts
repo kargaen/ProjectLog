@@ -20,6 +20,9 @@ type MockProjectState = {
     project_manual_order: string[];
     project_recent_usage: Record<string, number>;
     timesheet_rounding_enabled: boolean;
+    project_colors: Record<string, string>;
+    project_groups: Record<string, string>;
+    group_projects_enabled: boolean;
   };
 };
 
@@ -86,12 +89,19 @@ const defaultState: MockProjectState = {
     project_manual_order: sampleProjects,
     project_recent_usage: {},
     timesheet_rounding_enabled: false,
+    project_colors: {},
+    project_groups: {},
+    group_projects_enabled: false,
   },
+};
+
+type InitialMockState = Partial<Omit<MockProjectState, "settings">> & {
+  settings?: Partial<MockProjectState["settings"]>;
 };
 
 export async function installTauriMocks(
   page: Page,
-  initialState?: Partial<MockProjectState>,
+  initialState?: InitialMockState,
   options?: MockOptions
 ) {
   const mergedState: MockProjectState = {

@@ -227,10 +227,10 @@ export function createQuickPanelController(
         .map(([groupName, projects]) => ({ groupName, projects }));
 
       const result: { groupName: string | null; projects: string[] }[] = [];
+      result.push(...namedGroups);
       if (ungrouped.length > 0) {
         result.push({ groupName: null, projects: ungrouped });
       }
-      result.push(...namedGroups);
       return result;
     },
   } as QuickPanelView;

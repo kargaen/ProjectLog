@@ -114,8 +114,8 @@ Ordered by dependency. Flow A's item subsumes the old right-alignment bug (remov
 removes the `space-between` regression), so there is no separate item for it.
 
 ```md
-[ ] 1. Add failing Playwright test for Flow D (named groups above ungrouped) in `tests/ui/app.spec.ts` — done when it fails against current ungrouped-first order for the right reason
-[ ] 2. Swap bucket order in `groupedProjects` getter in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` (named groups before ungrouped) — done when test 1 passes
+[x] 1. Add failing Playwright test for Flow D (named groups above ungrouped) in `tests/ui/app.spec.ts` — done when it fails against current ungrouped-first order for the right reason
+[x] 2. Swap bucket order in `groupedProjects` getter in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` (named groups before ungrouped) — done when test 1 passes
 [ ] 3. Add failing Playwright test for Flow A (title box carries the color, icon-button does not, title left-aligned) in `tests/ui/app.spec.ts` — done when it fails for the right reason
 [ ] 4. Replace the color-dot span with a title-box background tint in `src/views/components/projects/ProjectListPanel.view.svelte` — done when test 3's DOM-structure assertions pass
 [ ] 5. Adjust `.project-button` / `.color-dot` rules in `src/views/screens/quickpanel.css` (remove dot styling, apply background tint, drop the `space-between` right-alignment side effect) — done when test 3 fully passes and Flow B (clear) is green

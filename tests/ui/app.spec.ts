@@ -148,6 +148,39 @@ test.describe("QuickPanel UI", () => {
   // transport calls, not the OS-level result.
 });
 
+test.describe("QuickPanel grouping", () => {
+  const GROUPED_PROJECTS = ["Alpha", "Bravo", "Charlie", "Delta"];
+
+  test.beforeEach(async ({ page }) => {
+    await installTauriMocks(page, {
+      projects: GROUPED_PROJECTS,
+      settings: {
+        project_sort_mode: "manual",
+        project_manual_order: GROUPED_PROJECTS,
+        group_projects_enabled: true,
+        // Bravo + Delta in "Work", Charlie in "Personal", Alpha ungrouped.
+        project_groups: { Bravo: "Work", Delta: "Work", Charlie: "Personal" },
+      },
+    });
+    await page.goto("/");
+    await stepPause(page);
+  });
+
+  test("named groups render above ungrouped projects, ungrouped has no header", async ({ page }) => {
+    const items = page.locator(".project-list > *");
+
+    // Flow D: the list opens with a named group's header, not an ungrouped row.
+    await expect(items.first()).toHaveClass(/group-header/);
+
+    // Named group headers appear (sorted A-Z), and there is no "Ungrouped" title.
+    await expect(page.locator(".project-list .group-header")).toHaveText(["Personal", "Work"]);
+    await expect(page.getByText("Ungrouped", { exact: true })).toHaveCount(0);
+
+    // The single ungrouped project sits at the bottom.
+    await expect(items.last().locator(".project-button span").first()).toHaveText("Alpha");
+  });
+});
+
 test.describe("Timesheet preview window", () => {
   test.beforeEach(async ({ page }) => {
     await installTauriMocks(page);
