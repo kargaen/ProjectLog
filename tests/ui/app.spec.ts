@@ -181,6 +181,32 @@ test.describe("QuickPanel grouping", () => {
   });
 });
 
+test.describe("QuickPanel project colors", () => {
+  test.beforeEach(async ({ page }) => {
+    await installTauriMocks(page, {
+      projects: ["Alpha"],
+      settings: {
+        project_sort_mode: "manual",
+        project_manual_order: ["Alpha"],
+        project_colors: { Alpha: "#3f8fd1" },
+      },
+    });
+    await page.goto("/");
+    await stepPause(page);
+  });
+
+  test("assigned color tints the project title box, not a dot or the icon button", async ({ page }) => {
+    const row = page.locator(".project-row", { hasText: "Alpha" });
+
+    // Flow A: the color is the title box's background, not a separate dot.
+    await expect(row.locator(".project-button")).toHaveCSS("background-color", "rgb(63, 143, 209)");
+    await expect(row.locator(".color-dot")).toHaveCount(0);
+
+    // The remove/save (×/＋) button beside it does not take the color.
+    await expect(row.locator(".icon-button")).not.toHaveCSS("background-color", "rgb(63, 143, 209)");
+  });
+});
+
 test.describe("Timesheet preview window", () => {
   test.beforeEach(async ({ page }) => {
     await installTauriMocks(page);

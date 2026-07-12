@@ -131,13 +131,14 @@
               |||
             </button>
           {/if}
-          <button class="project-button" onclick={() => onSelectProject(project)}>
-            {#if projectColors[project]}
-              <span
-                class="color-dot"
-                style="background: {projectColors[project]};"
-              ></span>
-            {/if}
+          <button
+            class="project-button"
+            class:has-color={projectColors[project]}
+            style={projectColors[project]
+              ? `background: ${projectColors[project]};`
+              : ""}
+            onclick={() => onSelectProject(project)}
+          >
             <span>{project}</span>
             {#if activeProject === project}<strong>Active</strong>{/if}
           </button>
