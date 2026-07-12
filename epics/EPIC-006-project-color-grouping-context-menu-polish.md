@@ -1,6 +1,6 @@
 # EPIC-006: Project color, grouping & context-menu polish
 
-**Status:** draft
+**Status:** active
 **Created:** 2026-07-12
 **Architecture baseline:** c7ac315
 
