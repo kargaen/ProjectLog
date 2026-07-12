@@ -38,7 +38,7 @@ ProjectLog helps you keep a running record of:
 
 This `README.md` is the high-level entry point for understanding the product and its purpose.
 
-For implementation structure, architectural boundaries, and the proposed MVC refactor direction, see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+For implementation structure and architectural boundaries, see [`ARCHITECTURE.md`](./ARCHITECTURE.md) — an index into the sharded `architecture/` directory.
 
 ## Release workflow
 
