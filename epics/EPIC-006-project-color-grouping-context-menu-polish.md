@@ -1,6 +1,6 @@
 # EPIC-006: Project color, grouping & context-menu polish
 
-**Status:** active
+**Status:** closed
 **Created:** 2026-07-12
 **Architecture baseline:** c7ac315
 
@@ -154,8 +154,8 @@ the same domain state; neither changes what is logged or reconstructed.
 
 | # | Question | Blocks | Decision needed by |
 |---|---|---|---|
-| Q1 | The context menu's height is dynamic (grows with group count). Does clamp use a measured height (read from the DOM after mount, then reposition) or a conservative max estimate? | Blocks item 7 only | Slice 6/7 — pick measured-then-reposition if a fixed estimate visibly misplaces tall menus |
-| Q2 | Two related fixes for this feature area exist unmerged on `claude/app-architecture-rewrite-j2daqd` (per EPIC-002 Q1). Confirm none overlaps these files before implementing, to avoid a later conflict. | No — check at slice start | Before slice 2 |
+| Q1 | The context menu's height is dynamic (grows with group count). Does clamp use a measured height (read from the DOM after mount, then reposition) or a conservative max estimate? | Blocks item 7 only | ~~Slice 6/7~~ — **RESOLVED (measured)**: the view reads its own `offsetWidth`/`offsetHeight` after mount and repositions; no estimate. |
+| Q2 | Two related fixes for this feature area exist unmerged on `claude/app-architecture-rewrite-j2daqd` (per EPIC-002 Q1). Confirm none overlaps these files before implementing, to avoid a later conflict. | No — check at slice start | **RELOCATED** to the standing branch decision tracked in EPIC-002 Q1 — the unmerged branch touches the same color/group files, so merging it will conflict with EPIC-006's changes and needs a rebase/cherry-pick call there, not here. |
 
 ### New capability
 

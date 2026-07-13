@@ -57,6 +57,8 @@ If a change would touch `description/` before the corresponding code exists, tha
 | `description/10-tray-handler-pattern.md` | Tray event handler code example |
 | `description/11-view-pattern.md` | View component code example |
 | `description/12-release-shipping-procedure.md` | Versioning mechanics, CHANGELOG.md lifecycle, shipping steps |
+| `description/13-project-list-color-grouping.md` | Project color/group settings, context-menu assignment, grouped rendering, menu-placement helper |
+| `25-change-history.md` | Append-only log of Description amendments (neither constitution nor description) |
 
 ---
 
