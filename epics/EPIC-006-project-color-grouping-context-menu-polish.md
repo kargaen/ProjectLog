@@ -118,7 +118,7 @@ removes the `space-between` regression), so there is no separate item for it.
 [x] 2. Swap bucket order in `groupedProjects` getter in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` (named groups before ungrouped) — done when test 1 passes
 [x] 3. Add failing Playwright test for Flow A (title box carries the color, icon-button does not, title left-aligned) in `tests/ui/app.spec.ts` — done when it fails for the right reason
 [x] 4. Replace the color-dot span with a title-box background tint in `src/views/components/projects/ProjectListPanel.view.svelte` — done when test 3's DOM-structure assertions pass
-[ ] 5. Adjust `.project-button` / `.color-dot` rules in `src/views/screens/quickpanel.css` (remove dot styling, apply background tint, drop the `space-between` right-alignment side effect) — done when test 3 fully passes and Flow B (clear) is green
+[x] 5. Adjust `.project-button` / `.color-dot` rules in `src/views/screens/quickpanel.css` (remove dot styling, apply background tint, drop the `space-between` right-alignment side effect) — done when test 3 fully passes and Flow B (clear) is green
 [ ] 6. Add failing unit test for `clampMenuPosition` (fits / overflows right / bottom / both) in a new test file under `tests/ui/` — done when it fails for the right reason
 [ ] 7. Implement `clampMenuPosition` and apply it in `openContextMenu` in `src/controllers/projects/createProjectContextMenuController.ts` — done when test 6 passes
 [ ] 8. Pass the clamped position through to the menu in `src/views/components/projects/ProjectContextMenu.view.svelte` (view stays passive; consumes clamped x/y) — done when a Flow C Playwright check shows the menu fully within the window near an edge

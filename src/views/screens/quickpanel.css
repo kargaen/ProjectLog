@@ -222,13 +222,6 @@ body {
   white-space: nowrap;
 }
 
-.quickpanel-screen .color-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
 .quickpanel-screen .group-header {
   padding: 4px 2px 2px;
   font-size: 10px;

@@ -205,6 +205,17 @@ test.describe("QuickPanel project colors", () => {
     // The remove/save (×/＋) button beside it does not take the color.
     await expect(row.locator(".icon-button")).not.toHaveCSS("background-color", "rgb(63, 143, 209)");
   });
+
+  test("clearing the color returns the title box to the default background", async ({ page }) => {
+    const row = page.locator(".project-row", { hasText: "Alpha" });
+    await expect(row.locator(".project-button")).toHaveCSS("background-color", "rgb(63, 143, 209)");
+
+    // Flow B: clear the color through the context menu.
+    await row.click({ button: "right" });
+    await page.getByTitle("Clear color").click();
+
+    await expect(row.locator(".project-button")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  });
 });
 
 test.describe("Timesheet preview window", () => {

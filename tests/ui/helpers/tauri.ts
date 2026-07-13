@@ -386,6 +386,24 @@ export async function installTauriMocks(
           case "set_timesheet_rounding_enabled":
             clonedState.settings.timesheet_rounding_enabled = Boolean(args.enabled);
             return null;
+          case "set_project_color": {
+            const project = String(args.project ?? "");
+            if (args.color === null || args.color === undefined) {
+              delete clonedState.settings.project_colors[project];
+            } else {
+              clonedState.settings.project_colors[project] = String(args.color);
+            }
+            return null;
+          }
+          case "set_project_group": {
+            const project = String(args.project ?? "");
+            if (args.group === null || args.group === undefined) {
+              delete clonedState.settings.project_groups[project];
+            } else {
+              clonedState.settings.project_groups[project] = String(args.group);
+            }
+            return null;
+          }
           case "save_quickpanel_bounds":
           case "set_update_available":
           case "log_from_frontend":
