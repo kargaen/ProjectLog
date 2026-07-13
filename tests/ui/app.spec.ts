@@ -218,6 +218,37 @@ test.describe("QuickPanel project colors", () => {
   });
 });
 
+test.describe("QuickPanel context menu", () => {
+  const VIEWPORT = { width: 300, height: 320 };
+
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize(VIEWPORT);
+    await installTauriMocks(page, {
+      projects: ["Alpha"],
+      settings: { project_sort_mode: "manual", project_manual_order: ["Alpha"] },
+    });
+    await page.goto("/");
+    await stepPause(page);
+  });
+
+  test("context menu stays fully inside the window when opened near an edge", async ({ page }) => {
+    // Right-clicking a row in a window narrower than the menu would clip it without clamping.
+    await page.locator(".project-row", { hasText: "Alpha" }).click({ button: "right" });
+
+    const menu = page.locator(".project-context-menu");
+    await expect(menu).toBeVisible();
+
+    const box = await menu.boundingBox();
+    if (!box) throw new Error("context menu has no bounding box");
+
+    // Flow C: the whole menu is within the viewport on both axes (1px slack for rounding).
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(VIEWPORT.width + 1);
+    expect(box.y + box.height).toBeLessThanOrEqual(VIEWPORT.height + 1);
+  });
+});
+
 test.describe("Timesheet preview window", () => {
   test.beforeEach(async ({ page }) => {
     await installTauriMocks(page);

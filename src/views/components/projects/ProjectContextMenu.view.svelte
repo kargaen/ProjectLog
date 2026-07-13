@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { clampMenuPosition } from "../../../lib/menuPosition";
+
   const COLOR_PRESETS = [
     "#e05d44",
     "#e8974f",
@@ -31,7 +33,33 @@
     onRequestNewGroup: () => void;
     onClose: () => void;
   } = $props();
+
+  // Measure the rendered menu and the viewport so the menu can be pulled back inside
+  // the window when a right-click near an edge would otherwise clip it. offsetWidth/Height
+  // (not clientWidth) so the 1px border is counted — the clamp must match the real box.
+  let menuEl = $state<HTMLDivElement | null>(null);
+  let menuWidth = $state(0);
+  let menuHeight = $state(0);
+  let viewportWidth = $state(0);
+  let viewportHeight = $state(0);
+
+  $effect(() => {
+    if (menuEl) {
+      menuWidth = menuEl.offsetWidth;
+      menuHeight = menuEl.offsetHeight;
+    }
+  });
+
+  const position = $derived(
+    clampMenuPosition(
+      { x, y },
+      { width: menuWidth, height: menuHeight },
+      { width: viewportWidth, height: viewportHeight }
+    )
+  );
 </script>
+
+<svelte:window bind:innerWidth={viewportWidth} bind:innerHeight={viewportHeight} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -46,8 +74,9 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
+    bind:this={menuEl}
     class="project-context-menu"
-    style="left: {x}px; top: {y}px;"
+    style="left: {position.x}px; top: {position.y}px;"
     onclick={(event) => event.stopPropagation()}
   >
     <div class="context-menu-section-label">Color</div>

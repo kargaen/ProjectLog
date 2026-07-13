@@ -122,7 +122,7 @@ removes the `space-between` regression), so there is no separate item for it.
 [x] 6. Add failing unit test for `clampMenuPosition` (fits / overflows right / bottom / both) in a new test file under `tests/ui/` — done when it fails for the right reason
 [x] 7. Implement `clampMenuPosition` in ~~`src/controllers/projects/createProjectContextMenuController.ts`~~ `src/lib/menuPosition.ts` — done when test 6 passes
     - (amended 2026-07-12) Placed as a pure helper in `lib/`, not the controller: clamping needs the menu's rendered size, which only exists after mount, so the *view* measures and applies it — and a view may import a `lib` util but not a controller (import graph). `openContextMenu` keeps storing the raw click point; the clamp happens at render in item 8.
-[ ] 8. Consume `clampMenuPosition` in `src/views/components/projects/ProjectContextMenu.view.svelte` — view measures its own size (`bind:clientWidth/clientHeight`) and the viewport (`<svelte:window>`), applies the clamped x/y — done when a Flow C Playwright check shows the menu fully within the window near an edge
+[x] 8. Consume `clampMenuPosition` in `src/views/components/projects/ProjectContextMenu.view.svelte` — view measures its own size (`offsetWidth/Height` via `bind:this`, so the 1px border counts) and the viewport (`<svelte:window>`), applies the clamped x/y — done when a Flow C Playwright check shows the menu fully within the window near an edge
 ```
 
 ---
