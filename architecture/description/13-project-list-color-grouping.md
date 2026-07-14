@@ -17,7 +17,7 @@ Command wrappers live in `src-tauri/src/commands/settings_commands.rs`; the logi
 
 ### Rendering
 
-- An assigned color fills the `.project-button` background (the project title box), not the row's remove/save (×/＋) icon button.
+- An assigned color renders as a full-width strip of the true color (`.project-color-underline`) along the bottom of the project row — not a background fill on the title box or the remove/save (×/＋) icon button.
 - When `group_projects_enabled`, the `groupedProjects` getter in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` buckets the sorted project list by group and returns named groups (A–Z, each under a header) first, then the ungrouped bucket last with no header.
 
 ### Context-menu placement
