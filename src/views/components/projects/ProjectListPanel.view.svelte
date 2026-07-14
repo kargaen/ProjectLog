@@ -135,7 +135,7 @@
             class="project-button"
             class:has-color={projectColors[project]}
             style={projectColors[project]
-              ? `background: ${projectColors[project]}; color: #ffffff; /* TODO: Quick fix - forced white text for colored rows. Needs dynamic contrast check later. */`
+              ? `background: color-mix(in srgb, ${projectColors[project]}, transparent 60%); /* TODO: Quick fix - applies 40% opacity to background color to soften it. Adjust '60%' up to make it more transparent. */`
               : ""}
             onclick={() => onSelectProject(project)}
           >
