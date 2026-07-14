@@ -131,14 +131,7 @@
               |||
             </button>
           {/if}
-          <button
-            class="project-button"
-            class:has-color={projectColors[project]}
-            style={projectColors[project]
-              ? `background: color-mix(in srgb, ${projectColors[project]}, transparent 60%); /* TODO: Quick fix - applies 40% opacity to background color to soften it. Adjust '60%' up to make it more transparent. */`
-              : ""}
-            onclick={() => onSelectProject(project)}
-          >
+          <button class="project-button" onclick={() => onSelectProject(project)}>
             <span>{project}</span>
             {#if activeProject === project}<strong>Active</strong>{/if}
           </button>
@@ -158,6 +151,12 @@
             >
               +
             </button>
+          {/if}
+          {#if projectColors[project]}
+            <div
+              class="project-color-underline"
+              style="background: {projectColors[project]};"
+            ></div>
           {/if}
         </div>
       {/each}

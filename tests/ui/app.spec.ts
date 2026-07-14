@@ -195,26 +195,29 @@ test.describe("QuickPanel project colors", () => {
     await stepPause(page);
   });
 
-  test("assigned color tints the project title box, not a dot or the icon button", async ({ page }) => {
+  test("assigned color shows as a full-color underline strip, not a background fill", async ({ page }) => {
     const row = page.locator(".project-row", { hasText: "Alpha" });
 
-    // Flow A: the color is the title box's background, not a separate dot.
-    await expect(row.locator(".project-button")).toHaveCSS("background-color", "rgb(63, 143, 209)");
-    await expect(row.locator(".color-dot")).toHaveCount(0);
+    // The true (full-opacity) color renders as the underline strip along the row.
+    await expect(row.locator(".project-color-underline")).toHaveCSS(
+      "background-color",
+      "rgb(63, 143, 209)"
+    );
 
-    // The remove/save (×/＋) button beside it does not take the color.
+    // It is not a background fill on the title box or the remove/save (×/＋) button.
+    await expect(row.locator(".project-button")).not.toHaveCSS("background-color", "rgb(63, 143, 209)");
     await expect(row.locator(".icon-button")).not.toHaveCSS("background-color", "rgb(63, 143, 209)");
   });
 
-  test("clearing the color returns the title box to the default background", async ({ page }) => {
+  test("clearing the color removes the underline strip", async ({ page }) => {
     const row = page.locator(".project-row", { hasText: "Alpha" });
-    await expect(row.locator(".project-button")).toHaveCSS("background-color", "rgb(63, 143, 209)");
+    await expect(row.locator(".project-color-underline")).toHaveCount(1);
 
-    // Flow B: clear the color through the context menu.
+    // Clear the color through the context menu.
     await row.click({ button: "right" });
     await page.getByTitle("Clear color").click();
 
-    await expect(row.locator(".project-button")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(row.locator(".project-color-underline")).toHaveCount(0);
   });
 });
 
