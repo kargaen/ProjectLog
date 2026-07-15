@@ -1,14 +1,15 @@
-name: Build, Release, and Website
+name: Release
+
+# A push to master publishes a stable, tagged release from package.json's version.
+# master is release-only (see ARCHITECTURE.md): it changes only when shipping.
+# Release candidates are a separate, automatic pipeline on dev (release-candidate.yml),
+# and the website is deployed by pages.yml. This workflow does neither.
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - master
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Optional version to build, e.g. 2.4.0 (stable) or 2.4.0-1 (RC). RC pre-release suffix is always normalized to -1. Leave empty to use package.json."
-        required: false
 
 permissions:
   contents: write
@@ -20,6 +21,7 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
       tag: ${{ steps.meta.outputs.tag }}
+      already_released: ${{ steps.exists.outputs.already_released }}
 
     steps:
       - name: Checkout
@@ -37,15 +39,14 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Apply workflow-dispatch version
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+      - name: Require a stable version
         shell: bash
         run: |
-          VERSION="${{ inputs.version }}"
+          VERSION="$(node -p "require('./package.json').version")"
           if [[ "$VERSION" == *-* ]]; then
-            VERSION="${VERSION%%-*}-1"
+            echo "::error::master publishes a stable release, but package.json version is '$VERSION'. Bump to a clean MAJOR.MINOR.PATCH (no prerelease suffix) before merging to master."
+            exit 1
           fi
-          node scripts/sync-version.mjs "$VERSION"
 
       - name: Check version sync
         shell: bash
@@ -66,9 +67,19 @@ jobs:
             echo "::error::package.json (${PACKAGE_VERSION}) and tauri.conf.json (${TAURI_VERSION}) versions differ."
             exit 1
           fi
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" != "v${PACKAGE_VERSION}" ]]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package version v${PACKAGE_VERSION}."
-            exit 1
+
+      - name: Skip if this version is already released
+        id: exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if gh release view "v${VERSION}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "already_released=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release v${VERSION} already exists; nothing to publish. Bump the version to ship again."
+          else
+            echo "already_released=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build frontend
@@ -85,6 +96,7 @@ jobs:
   build-windows:
     name: Build Windows Installer and Publish Release
     needs: validate
+    if: ${{ needs.validate.outputs.already_released != 'true' }}
     runs-on: windows-latest
     permissions:
       contents: write
@@ -113,51 +125,28 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Apply workflow-dispatch version
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
-        shell: bash
-        run: |
-          VERSION="${{ inputs.version }}"
-          if [[ "$VERSION" == *-* ]]; then
-            VERSION="${VERSION%%-*}-1"
-          fi
-          node scripts/sync-version.mjs "$VERSION"
-
       - name: Test Rust core
         run: cargo test
         working-directory: src-tauri
 
-      - name: Prepare release body
+      - name: Prepare release body from CHANGELOG
         id: release_body
         shell: bash
         run: |
-          if [[ "${{ contains(needs.validate.outputs.version, '-') }}" == "true" ]]; then
-            echo "body=⚠️ This is a release candidate intended for testing only. It may be unstable. Use at your own risk." >> "$GITHUB_OUTPUT"
-          else
-            {
-              echo 'body<<RELEASE_BODY_EOF'
-              cat CHANGELOG.md
-              echo 'RELEASE_BODY_EOF'
-            } >> "$GITHUB_OUTPUT"
-          fi
+          {
+            echo 'body<<RELEASE_BODY_EOF'
+            cat CHANGELOG.md
+            echo 'RELEASE_BODY_EOF'
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Delete existing RC releases for this base version
-        if: ${{ contains(needs.validate.outputs.version, '-') }}
+      # A stable release supersedes the rolling release candidate; remove it.
+      - name: Remove the rolling release candidate
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          BASE="${{ needs.validate.outputs.version }}"
-          BASE="${BASE%%-*}"
-          gh release list --json tagName,isPrerelease \
-            --jq ".[] | select(.isPrerelease and (.tagName | startswith(\"v${BASE}-\"))) | .tagName" \
-            --limit 50 2>/dev/null \
-            | while IFS= read -r tag; do
-                echo "Deleting old RC: $tag"
-                gh release delete "$tag" --cleanup-tag --yes || true
-              done
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete rc --repo "${{ github.repository }}" --cleanup-tag --yes || true
 
-      - name: Build installer and upload release assets
+      - name: Build installer and publish release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -168,109 +157,4 @@ jobs:
           releaseName: "ProjectLog ${{ needs.validate.outputs.tag }}"
           releaseBody: ${{ steps.release_body.outputs.body }}
           releaseDraft: false
-          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
-
-  deploy-pages:
-    name: Deploy Website
-    needs:
-      - validate
-      - build-windows
-    if: ${{ always() && needs.validate.result == 'success' && needs.build-windows.result == 'success' && !contains(needs.validate.outputs.version, '-') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Generate website
-        shell: bash
-        run: |
-          mkdir -p docs
-          cat > docs/index.html <<EOF
-          <!doctype html>
-          <html lang="en">
-            <head>
-              <meta charset="utf-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1" />
-              <title>ProjectLog</title>
-              <style>
-                body { margin: 0; font-family: system-ui, sans-serif; color: #20241f; background: #f4f5f1; }
-                main { max-width: 720px; margin: 0 auto; padding: 64px 24px; }
-                h1 { font-size: 36px; margin: 0 0 8px; }
-                p { font-size: 17px; line-height: 1.55; color: #495047; }
-                a { color: #267a62; font-weight: 650; }
-              </style>
-            </head>
-            <body>
-              <main>
-                <h1>ProjectLog</h1>
-                <p>Current version: <strong>${{ needs.validate.outputs.version }}</strong></p>
-                <p>No-nonsense project time tracking for Cockpit timesheets.</p>
-                <p><a href="https://github.com/kargaen/ProjectLog/releases/latest">Download the latest release</a></p>
-                <p><a href="./privacy.html">Privacy policy</a></p>
-              </main>
-            </body>
-          </html>
-          EOF
-          cat > docs/privacy.html <<EOF
-          <!doctype html>
-          <html lang="en">
-            <head>
-              <meta charset="utf-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1" />
-              <title>Privacy Policy</title>
-              <style>
-                body { margin: 0; font-family: system-ui, sans-serif; color: #20241f; background: #f4f5f1; }
-                main { max-width: 760px; margin: 0 auto; padding: 64px 24px; }
-                h1 { font-size: 36px; margin: 0 0 12px; }
-                h2 { font-size: 22px; margin: 32px 0 8px; }
-                p, li { font-size: 17px; line-height: 1.6; color: #495047; }
-                a { color: #267a62; font-weight: 650; }
-              </style>
-            </head>
-            <body>
-              <main>
-                <p><a href="./">ProjectLog</a></p>
-                <h1>Privacy Policy</h1>
-                <p>This privacy policy applies to ProjectLog.</p>
-
-                <h2>What ProjectLog stores</h2>
-                <p>ProjectLog stores data only on the user's local machine.</p>
-                <p>This locally stored data may include project names entered by the user, comments entered by the user, timestamps for when the user starts working on a selected project, and local application settings and related local log data needed for the app to function.</p>
-                <p>ProjectLog does not automatically track work in the background. The user is responsible for selecting a project and entering any related text themselves.</p>
-                <p>The user can also reset stored data through the app.</p>
-
-                <h2>What ProjectLog does not do</h2>
-                <p>ProjectLog does not send project data, comments, timestamps, or local logs to the developer, to a cloud service, or to third parties.</p>
-                <p>ProjectLog does not sell, share, or hand over user data to external parties.</p>
-                <p>ProjectLog does not submit timesheet data to any finance, ERP, or reporting system. The user is responsible for entering their own timesheet information into whatever system they use.</p>
-
-                <h2>External services</h2>
-                <p>ProjectLog only connects to the network for its auto-update feature.</p>
-                <p>When enabled and used, the app may contact GitHub release update endpoints to check for and download updates. This connection is used only for application update functionality.</p>
-
-                <h2>Contact</h2>
-                <p>If you have questions about this privacy policy, you can open an issue on <a href="https://github.com/kargaen/ProjectLog/issues">GitHub</a>.</p>
-              </main>
-            </body>
-          </html>
-          EOF
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload website artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs
-
-      - name: Deploy website
-        id: deployment
-        uses: actions/deploy-pages@v4
+          prerelease: false
