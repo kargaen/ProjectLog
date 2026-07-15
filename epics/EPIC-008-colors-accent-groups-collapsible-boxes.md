@@ -31,6 +31,7 @@ When the project list renders
 Then each named group appears as a bordered box with a header showing a collapse/expand chevron and the group name
 And that group's member projects appear indented inside the box
 And ungrouped projects appear with no box and no indentation
+And a group with no member projects is not shown at all (see Flow 11 for where empty group names still appear)
 ```
 
 ### Flow 3: Collapsing a group hides its members, visually only
@@ -47,13 +48,23 @@ Then the members are shown again
 ### Flow 4: A checkbox toggles whether groups are shown
 
 ```gherkin
-Given the sort row (Manual / A-Z / Recent)
-When the user views the grouping control
-Then it is a checkbox (not a button)
+Given at least one project is assigned to a group
+When the user views the sort row (Manual / A-Z / Recent)
+Then the grouping control is a checkbox (not a button)
 When the checkbox is unchecked
 Then the list is flat (no boxes, no indentation)
 When it is checked
 Then the list shows group boxes per Flow 2
+
+Given no project is assigned to any group
+When the user views the sort row
+Then the grouping checkbox is not shown at all
+
+Given Manual sort is selected
+When the user views the grouping checkbox
+Then it is checked and disabled (locked on), because manual drag reordering operates within groups
+And hovering it reveals that manual mode requires groups to be enabled
+And leaving Manual restores the checkbox to a normal toggle
 ```
 
 ### Flow 5: Acting on a group forces grouping on
@@ -106,6 +117,24 @@ When the user changes group membership in the QuickPanel
 Then the tray menu reflects the new grouping the next time it is built
 ```
 
+### Flow 10: Every project has a timestamp from creation
+
+```gherkin
+Given a project is created (added or quick-tracked) and has never been selected
+When the list is ordered by Recent
+Then the project still has a recency timestamp (its creation time), so it takes a definite position
+And no project is ever missing a timestamp
+```
+
+### Flow 11: Empty group names remain pickable in the context menu
+
+```gherkin
+Given a group name exists but currently has no member projects
+When the user opens a project's context menu to assign a group
+Then that group name still appears as a pickable option
+And the empty group is not rendered as a box in the project list (Flow 2)
+```
+
 **Out of scope for this epic:**
 - Colors or collapse in the tray — the native menu shows neither. The tray also cannot set a
   project's color, group, or collapsed state; it only selects/activates.
@@ -142,8 +171,8 @@ function buildGroupedView(
 ```rust
 // src-tauri/src/infrastructure/tray_menu.rs — the group-derived tray structure.
 // Pure enough to unit-test: (projects, groups, sort) -> ordered tree of top-level items
-// and group submenus, each carrying stable select ids. The `select::` id scheme must keep
-// resolving when items are nested in submenus (implementation risk — see §5).
+// and group submenus. Select ids are keyed by project name / a stable key (Q3), NOT by a
+// positional index, so selection resolves regardless of submenu nesting.
 ```
 
 The collapse toggle, the checkbox, and the accent-bar markup constrain nothing downstream —
@@ -160,12 +189,14 @@ no signatures.
 | 1 | rendered row | Playwright DOM — a `.project-color-accent` (or agreed class) element exists at the row's left with the assigned color; no background-fill / underline | `installTauriMocks` with a colored project | exact — accent background equals the hex; row background unchanged |
 | 2 | rendered list | Playwright DOM — group box element wraps a header (chevron + name) and indented member rows; ungrouped rows have neither box nor indent class | mock state with named groups + ungrouped | exact — structure/classes present |
 | 3 | collapse behavior | Playwright DOM — after clicking the chevron, member rows are absent/hidden; group membership + order unchanged; re-click restores | grouped mock state | exact — members hidden then shown; no state mutation observed via a follow-up get_state |
-| 4 | grouping control | Playwright DOM — control is a checkbox; toggling switches between flat and boxed layouts | grouped mock state | exact |
+| 4 | grouping control | Playwright DOM — control is a checkbox; toggling switches between flat and boxed layouts; hidden when no groups exist; in Manual it is checked + disabled with a hover hint | grouped mock state, and a no-groups mock state | exact |
 | 5 | force-enable | Playwright — with grouping off, invoking new-group / assign-group leaves grouping on and boxed | grouped mock state, grouping initially off | exact — group_projects_enabled true afterward |
 | 6 | `buildGroupedView(mode: "alphabetical")` | Textbook (lexicographic order) + hand-computed expected tree | unit fixture: groups + ungrouped with known names | exact — level-1 and level-2 sequences match |
 | 7 | `buildGroupedView(mode: "recent")` | Definition T_group = max(member timestamps); hand-computed expected tree | unit fixture with known timestamps | exact — level-1 by T_group, level-2 by member recency |
 | 8 | drag within group | Playwright — dragging within a group reorders siblings; a drag targeting another group/outside does not change membership | grouped manual-mode mock state | exact — membership unchanged; sibling order changed only within group |
-| 9 | tray group tree | Rust unit test — (projects, groups, sort) → expected ordered top-level items + per-group submenu contents with stable select ids | Rust fixture: projects + group map | exact — tree shape, contents, and id resolution |
+| 9 | tray group tree | Rust unit test — (projects, groups, sort) → expected ordered top-level items + per-group submenu contents with name-keyed select ids | Rust fixture: projects + group map | exact — tree shape, contents, and id resolution |
+| 10 | project creation timestamp | Rust test — adding / quick-tracking a project records a recency timestamp so Recent has a value before any selection | Rust fixture: add a project, read `project_recent_usage` | exact — the new project has a non-empty timestamp |
+| 11 | empty group in picker | Playwright DOM — a group with no members shows no box in the list but its name is offered in the context menu group picker | mock state with a named-but-memberless group | exact — no box rendered; name present in picker |
 
 `buildGroupedView` (flows 6/7, and the shape behind 2/8) is the load-bearing pure function —
 unit-tested like `clampMenuPosition`. The tray tree builder (flow 9) is the load-bearing
@@ -176,8 +207,9 @@ native contract.
 - OS-level menu rendering and native submenu appearance (flow 9) — manual verification only.
 - Exact pixel width of the accent bar, indentation depth, box border styling — visual, not
   asserted beyond presence/position.
-- Collapse-state persistence across restart — its mechanism is an open question (§5 Q1);
-  tests assert in-session collapse behavior only until that is decided.
+- Collapse-state persistence — by decision (Q1) collapse is ephemeral and resets to expanded
+  on restart; there is nothing persisted, so nothing to test there. Tests assert in-session
+  collapse behavior only.
 - Drag animation / drop-indicator visuals — only the resulting order/membership is asserted.
 
 ---
@@ -198,15 +230,20 @@ Natural slice boundaries, in dependency order. Later items depend on the view mo
 [ ] 8. Add group-box / indentation / chevron styles in `src/views/screens/quickpanel.css` — done when item 6 fully passes
 [ ] 9. Wire the controller to expose the `buildGroupedView` model in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` (replaces the old `groupedProjects` getter) — done when items 6/3 pass through the real controller
 [ ] 10. Add failing Playwright test for collapse/expand (flow 3) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 11. (blocked on Q1) Add collapse state + toggle in the QuickPanel controller `src/controllers/quickpanel/createQuickPanelController.svelte.ts` — done when item 10 passes
+[ ] 11. Add ephemeral (non-persistent) collapse state + toggle in the QuickPanel controller `src/controllers/quickpanel/createQuickPanelController.svelte.ts` — done when item 10 passes
 [ ] 12. Add failing Playwright test for the grouping checkbox (flow 4) in `tests/ui/app.spec.ts` — done when it fails for the right reason
 [ ] 13. Replace the "Group" button with a checkbox in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 12 passes
 [ ] 14. Add failing Playwright test for force-enable on group action (flow 5) in `tests/ui/app.spec.ts` — done when it fails for the right reason
 [ ] 15. Force `group_projects_enabled` true on new-group/assign-group in `src/controllers/projects/createProjectContextMenuController.ts` — done when item 14 passes
 [ ] 16. Add failing Playwright test for drag-locked-to-group (flow 8) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 17. (blocked on Q2) Constrain drag reordering to within-group in `src/controllers/projects/createProjectActionsController.ts` — done when item 16 passes
-[ ] 18. Add failing Rust unit test for the group→submenu tree (flow 9) in `src-tauri/src/infrastructure/tray_menu.rs` (or a sibling module) — done when it fails for the right reason
-[ ] 19. (blocked on Q3) Build group submenus in `src-tauri/src/infrastructure/tray_menu.rs` — done when item 18 passes
+[ ] 17. Constrain drag reordering to within the item's group span in the flat `project_manual_order`, in `src/controllers/projects/createProjectActionsController.ts` — done when item 16 passes
+[ ] 18. Add failing Rust unit test for the group→submenu tree with name-keyed select ids (flow 9) in `src-tauri/src/infrastructure/tray_menu.rs` (or a sibling module) — done when it fails for the right reason
+[ ] 19. Build group submenus with name-keyed (not index-keyed) select ids in `src-tauri/src/infrastructure/tray_menu.rs` — done when item 18 passes
+[ ] 20. Add failing Playwright test: grouping checkbox is hidden with no groups, and locked checked + disabled with a hover hint in Manual (flow 4) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[ ] 21. Implement checkbox visibility (hidden when no groups) and Manual-mode lock + tooltip in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 20 passes
+[ ] 22. Add failing Playwright test: an empty group renders no box in the list but its name is still offered in the context menu group picker (flows 2/11) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[ ] 23. Hide empty-group boxes in the grouped view while keeping empty group names in the picker — `src/lib/groupedView.ts` (list) — done when item 22's list assertion passes
+[ ] 24. Add failing Rust test then record a creation timestamp when a project is added/quick-tracked so Recent always has a value (flow 10), in the native project controller `src-tauri/src/controllers/project_controller.rs` — done when the test passes
 ```
 
 ---
@@ -216,7 +253,7 @@ Natural slice boundaries, in dependency order. Later items depend on the view mo
 ### Architecture impact
 
 - [ ] No change to ARCHITECTURE.md expected
-- [x] Amends Description sections: `description/13-project-list-color-grouping.md` (via `epic-closeout` after it ships) — color rendering, grouped rendering, tray submenus; and possibly `description/03`/`04` if a new settings field lands (Q1)
+- [x] Amends Description sections: `description/13-project-list-color-grouping.md` (via `epic-closeout` after it ships) — color rendering, grouped rendering, tray submenus. No new settings field: collapse is ephemeral (Q1), and the creation timestamp (Flow 10) writes into the existing `project_recent_usage`.
 - [ ] **Requires a Constitution change**
 
 No Constitution change. This is the "two surfaces, one domain" decision (constitution/01 #5,
@@ -234,14 +271,14 @@ about logging, sessions, or timesheet reconstruction. It directly serves the sev
 scenario — collapsible groups and a scannable colored list are the at-a-glance organization
 that case needs. Nothing about trust or accuracy is traded.
 
-### Open questions
+### Open questions — resolved (2026-07-15)
 
-| # | Question | Blocks | Decision needed by |
-|---|---|---|---|
-| Q1 | Does collapsed state persist across app restarts? If yes, it needs a new settings field (e.g. `group_collapsed`) keyed by group name, and a decision on what happens when a group is renamed/emptied. If no, it is ephemeral controller state. "Purely visual" argues for either. | Item 11 | epic-review |
-| Q2 | Manual order is stored as one flat `project_manual_order`. How does per-group locked drag reconcile with a flat order — reorder within the flat list but bounded to the group's index span, or move to a per-group order model? | Item 17 | epic-review |
-| Q3 | The tray `select::project::{idx}` id scheme is index-based over a flat list. Nesting in submenus must keep ids resolving — key selection by project name/stable id instead of positional index, or keep indices but over a stable pre-submenu ordering? | Item 19 | epic-review |
-| Q4 | Recent's `T_group = max(member timestamps)`: if a group has no members with a recorded timestamp, where does it sort at level 1 — treat as 0 (oldest) or exclude? | Item 1 (defines the test) | epic-review |
+| # | Decision |
+|---|---|
+| Q1 | **Collapse state is not persistent.** It is ephemeral QuickPanel controller state — no settings field, resets to expanded on restart. Item 11 is unblocked. |
+| Q2 | **Manual mode keeps groups shown.** In Manual sort the grouping checkbox is locked checked + disabled (Flow 4), with a hover hint that manual mode requires groups; drag reorders only within a group. Rationale: manual drag operates on the grouped view, so grouping cannot be toggled off there. *Residual implementation detail (not blocking review):* the flat `project_manual_order` still stores the order — drag bounds movement to the item's group span within that flat list; how level-1 (group vs group / vs ungrouped) is ordered in Manual is settled in the drag slice (item 17). |
+| Q3 | **Use stable keys, not indices.** Tray `select::` ids key on the project name / a stable key rather than a positional index, so selection resolves regardless of submenu nesting. Item 19 is unblocked on this basis. |
+| Q4 | **Every project always has a timestamp (creation time).** Projects get a recency timestamp when created (Flow 10), so a group never has timestamp-less members and `T_group = max(members)` is always defined. Empty groups do not appear in the list at all (Flow 2 / Flow 11), so they never need level-1 placement. |
 
 ### New capability
 
