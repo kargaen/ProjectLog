@@ -1,8 +1,14 @@
 # EPIC-007: Version-targeted release candidates
 
-**Status:** draft
+**Status:** superseded
 **Created:** 2026-07-13
 **Architecture baseline:** bb2c76b
+
+> **Superseded (2026-07-13, never implemented).** The maintainer chose the simpler rolling
+> model instead of version-targeted RCs: `dev` push → one rolling unversioned `rc` pre-release
+> (`release-candidate.yml`), `master` push → stable tagged release (`release.yml`). See
+> `architecture/description/12-release-shipping-procedure.md`. This epic's Option-A design and
+> its open questions are moot; kept for the record, not for implementation.
 
 Reworks the RC path in `.github/workflows/release.yml` so every release candidate is a
 candidate *for a declared next version*, fails loudly when no such version is declared, and

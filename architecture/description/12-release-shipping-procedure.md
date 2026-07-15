@@ -1,5 +1,11 @@
 ## Release Process — Shipping Procedure
 
+### Release candidates (automatic)
+
+Every push to `dev` (except skills-only pushes — paths under `.claude/skills/**` are ignored) triggers `release-candidate.yml`: it runs `npm run build` and the Rust tests, then publishes a single rolling pre-release under the `rc` tag with the Windows installer, built from the latest `dev` commit. It is unversioned — the same `rc` release and tag are deleted and recreated on each run, so there is only ever one release candidate live. A newer `dev` push cancels an in-flight build. Existing users are not notified (the updater serves only `releases/latest`), and the website is not updated.
+
+Producing an RC needs no manual step; merging to `dev` is enough.
+
 ### Versioning mechanics
 
 To bump the version from the repo root:
@@ -31,7 +37,14 @@ On release:
 
 ### Shipping a Release
 
-1. Merge `dev` into `master`
-2. Update `CHANGELOG.md` — rename `## Unreleased` to the version + date
-3. Run `npm version <version>` on `master` (no `-` suffix)
-4. Push `master` — the tag push triggers `release.yml`, which builds the installer, publishes the release using `CHANGELOG.md` as the body, and deploys the website
+1. Update `CHANGELOG.md` — rename `## Unreleased` to the version + date
+2. Run `npm version <version>` (no `-` suffix) so `package.json` carries a clean `MAJOR.MINOR.PATCH`
+3. Merge `dev` into `master` and push `master`
+
+The push to `master` triggers `release.yml`, which:
+
+- refuses to run if the version still carries a pre-release suffix, and does nothing if that version is already released;
+- builds the installer, tags `v<version>`, and publishes the stable release using `CHANGELOG.md` as the body;
+- deletes the rolling `rc` pre-release, since the stable release supersedes it.
+
+The website is deployed separately by `pages.yml` on the same `master` push.
