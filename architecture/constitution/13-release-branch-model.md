@@ -18,4 +18,4 @@ Release candidates are automatic and unversioned. Every push to `dev` (skills-on
 - Existing users are **not** notified by the auto-updater (the updater endpoint only serves `releases/latest`)
 - The website is **not** updated
 
-There is no manual RC step and no RC version number; merging to `dev` produces the candidate. Shipping a stable release deletes the `rc` pre-release.
+Producing an rc needs no manual step per push, and the rc release itself carries no version — but asset filenames do, taken from `package.json`. A version whose base is already published as a stable release never rebuilds as an rc: the build fails loudly until the version is bumped. After shipping, the first dev change therefore starts with `npm run bump -- patch` (or `minor`/`major`), producing the next base with a numeric-only pre-release suffix (e.g. `2.4.1-1`). Shipping a stable release deletes the `rc` pre-release.
