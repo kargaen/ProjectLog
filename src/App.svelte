@@ -61,6 +61,7 @@
     permanentProjects={state.appState.projects}
     allProjects={view.allProjects}
     groupedProjects={view.groupedProjects}
+    collapsedGroups={view.collapsedGroups}
     groupProjectsEnabled={view.groupProjectsEnabled}
     knownGroupNames={view.knownGroupNames}
     projectColors={view.projectColors}
@@ -92,6 +93,7 @@
     onHide={controller.hideWindow}
     onSetSortMode={controller.setSortMode}
     onToggleGroupProjectsEnabled={controller.toggleGroupProjectsEnabled}
+    onToggleProjectGroupCollapsed={controller.toggleProjectGroupCollapsed}
     onHandleDragOver={controller.handleDragOver}
     onHandleDragStart={controller.handleDragStart}
     onSelectProject={controller.selectProject}

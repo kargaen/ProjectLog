@@ -1,6 +1,7 @@
 import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import { type Update } from "@tauri-apps/plugin-updater";
 
+import { buildGroupedView } from "../../lib/groupedView";
 import type {
   ProjectState,
   QuickPanelMode,
@@ -112,6 +113,7 @@ export function createQuickPanelController(
   let projectColors = $state<Record<string, string>>({});
   let projectGroups = $state<Record<string, string>>({});
   let groupProjectsEnabled = $state(false);
+  let collapsedGroups = $state<Set<string>>(new Set());
   let currentWindowHeight = $state(Infinity);
   const stateSync = createQuickPanelStateSync({
     state,
@@ -147,8 +149,28 @@ export function createQuickPanelController(
   });
 
   function toggleGroupProjectsEnabled() {
+    if (view.effectiveSortMode === "manual") {
+      return;
+    }
     groupProjectsEnabled = !groupProjectsEnabled;
     stateSync.queueSettingsSave();
+  }
+
+  function forceGroupProjectsEnabled() {
+    if (!groupProjectsEnabled) {
+      groupProjectsEnabled = true;
+      stateSync.queueSettingsSave();
+    }
+  }
+
+  function toggleProjectGroupCollapsed(groupName: string) {
+    const next = new Set(collapsedGroups);
+    if (next.has(groupName)) {
+      next.delete(groupName);
+    } else {
+      next.add(groupName);
+    }
+    collapsedGroups = next;
   }
 
   const view = {
@@ -194,7 +216,10 @@ export function createQuickPanelController(
       return stateSync.getProjectGroups();
     },
     get groupProjectsEnabled() {
-      return stateSync.getGroupProjectsEnabled();
+      return this.effectiveSortMode === "manual" || stateSync.getGroupProjectsEnabled();
+    },
+    get collapsedGroups() {
+      return collapsedGroups;
     },
     get knownGroupNames() {
       const groups = stateSync.getProjectGroups();
@@ -205,33 +230,15 @@ export function createQuickPanelController(
     get groupedProjects() {
       const ordered = this.allProjects;
       if (!this.groupProjectsEnabled) {
-        return [{ groupName: null as string | null, projects: ordered }];
+        return ordered.map((name) => ({ kind: "project" as const, name }));
       }
 
-      const groups = stateSync.getProjectGroups();
-      const buckets = new Map<string | null, string[]>();
-      for (const project of ordered) {
-        const groupName = groups[project] ?? null;
-        const bucket = buckets.get(groupName);
-        if (bucket) {
-          bucket.push(project);
-        } else {
-          buckets.set(groupName, [project]);
-        }
-      }
-
-      const ungrouped = buckets.get(null) ?? [];
-      buckets.delete(null);
-      const namedGroups = [...buckets.entries()]
-        .sort(([a], [b]) => (a as string).localeCompare(b as string))
-        .map(([groupName, projects]) => ({ groupName, projects }));
-
-      const result: { groupName: string | null; projects: string[] }[] = [];
-      result.push(...namedGroups);
-      if (ungrouped.length > 0) {
-        result.push({ groupName: null, projects: ungrouped });
-      }
-      return result;
+      return buildGroupedView(
+        ordered,
+        stateSync.getProjectGroups(),
+        this.effectiveSortMode,
+        stateSync.getRecentProjects(),
+      );
     },
   } as QuickPanelView;
 
@@ -269,12 +276,14 @@ export function createQuickPanelController(
     state,
     quickPanelBridge,
     loadState: stateSync.loadState,
+    forceGroupProjectsEnabled,
   });
 
   const projectContextMenuActions = createProjectContextMenuController({
     state,
     quickPanelBridge,
     refreshFromCommand: stateSync.refreshFromCommand,
+    forceGroupProjectsEnabled,
   });
 
   const updateActions = createQuickPanelUpdateActions({
@@ -354,6 +363,7 @@ export function createQuickPanelController(
     openPortfolio: dialogActions.openPortfolio,
     openReleaseNotes: dialogActions.openReleaseNotes,
     toggleGroupProjectsEnabled,
+    toggleProjectGroupCollapsed,
     openProjectContextMenu: projectContextMenuActions.openContextMenu,
     closeProjectContextMenu: projectContextMenuActions.closeContextMenu,
     pickProjectColor: projectContextMenuActions.pickColor,

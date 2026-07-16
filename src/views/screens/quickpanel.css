@@ -113,10 +113,31 @@ body {
   margin-bottom: 5px;
 }
 
-.quickpanel-screen .sort-row button {
+.quickpanel-screen .sort-row button,
+.quickpanel-screen .group-toggle {
   padding: 4px 6px;
   background: #fff;
   color: #20241f;
+}
+
+.quickpanel-screen .group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid #d0d5cb;
+  border-radius: 7px;
+  font-size: calc(var(--font-scale, 1) * 11px);
+  cursor: pointer;
+}
+
+.quickpanel-screen .group-toggle input {
+  margin: 0;
+}
+
+.quickpanel-screen .group-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .quickpanel-screen .sort-active {
@@ -141,6 +162,22 @@ body {
   padding-bottom: 0;
 }
 
+.quickpanel-screen .project-group-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid #d9dfd5;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.quickpanel-screen .group-projects {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .quickpanel-screen .normal-controls-scroll {
   min-height: 0;
   display: flex;
@@ -158,6 +195,10 @@ body {
   position: relative;
 }
 
+.quickpanel-screen .project-row:has(.project-color-accent) {
+  grid-template-columns: 4px 1fr 26px;
+}
+
 .quickpanel-screen .project-row.dragging {
   opacity: 0.55;
 }
@@ -166,12 +207,24 @@ body {
   grid-template-columns: 18px 1fr 26px;
 }
 
+.quickpanel-screen .project-row.manual-sort:has(.project-color-accent) {
+  grid-template-columns: 4px 18px 1fr 26px;
+}
+
 .quickpanel-screen .project-row:not(:has(.icon-button)) {
   grid-template-columns: 1fr;
 }
 
+.quickpanel-screen .project-row:has(.project-color-accent):not(:has(.icon-button)) {
+  grid-template-columns: 4px 1fr;
+}
+
 .quickpanel-screen .project-row.manual-sort:not(:has(.icon-button)) {
   grid-template-columns: 18px 1fr;
+}
+
+.quickpanel-screen .project-row.manual-sort:has(.project-color-accent):not(:has(.icon-button)) {
+  grid-template-columns: 4px 18px 1fr;
 }
 
 .quickpanel-screen .project-row.drop-target::before {
@@ -188,6 +241,10 @@ body {
 .quickpanel-screen .project-row.drop-target.drop-after::before {
   top: auto;
   bottom: -3px;
+}
+
+.quickpanel-screen .project-row.project-row-indented {
+  margin-left: 12px;
 }
 
 .quickpanel-screen .drag-handle {
@@ -222,24 +279,38 @@ body {
   white-space: nowrap;
 }
 
-/* Full-width strip of the project's true color along the bottom of the row.
-   Absolutely positioned so it stays out of the row's grid flow. */
-.quickpanel-screen .project-color-underline {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
+.quickpanel-screen .project-color-accent {
+  width: 4px;
+  height: 26px;
+  border-radius: 999px;
   pointer-events: none;
 }
 
 .quickpanel-screen .group-header {
-  padding: 4px 2px 2px;
+  min-height: 22px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: #697064;
+  justify-content: flex-start;
+  gap: 4px;
   font-size: 10px;
   font-weight: 600;
+  text-align: left;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #697064;
+}
+
+.quickpanel-screen .group-header:hover:not(:disabled) {
+  background: transparent;
+  color: #267a62;
+}
+
+.quickpanel-screen .group-chevron {
+  width: 12px;
+  color: #8a9187;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .quickpanel-screen .project-row.active .project-button {
