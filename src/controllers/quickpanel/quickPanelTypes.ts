@@ -1,3 +1,4 @@
+import type { GroupedView } from "../../lib/groupedView";
 import type { ProjectState, QuickPanelMode, SortMode } from "../../models/types";
 
 export type UpdateStatus = "idle" | "available" | "downloading" | "ready";
@@ -40,15 +41,6 @@ export type QuickPanelState = {
   closeInputOnSubmit: boolean;
 };
 
-export type ProjectListEntry =
-  | { kind: "group"; name: string; projects: string[]; collapsed: boolean }
-  | { kind: "project"; name: string };
-
-export type ProjectGroupBucket = {
-  groupName: string | null;
-  projects: string[];
-};
-
 export type QuickPanelView = {
   readonly minOpacity: number;
   readonly isCompactLayout: boolean;
@@ -59,6 +51,6 @@ export type QuickPanelView = {
   readonly groupProjectsEnabled: boolean;
   readonly hasProjectGroups: boolean;
   readonly knownGroupNames: string[];
-  readonly projectListEntries: ProjectListEntry[];
-  readonly groupedProjects: ProjectGroupBucket[];
+  readonly groupedProjects: GroupedView;
+  readonly collapsedGroups: ReadonlySet<string>;
 };

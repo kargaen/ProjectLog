@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { SortMode } from "../../models/types";
-  import type { ProjectListEntry } from "../../controllers/quickpanel/quickPanelTypes";
+  import type { GroupedView } from "../../lib/groupedView";
   import AboutDialog from "../components/dialogs/AboutDialog.view.svelte";
   import InputDialog from "../components/dialogs/InputDialog.view.svelte";
   import UpdateDialog from "../components/dialogs/UpdateDialog.view.svelte";
@@ -19,7 +19,8 @@
     appVersion,
     permanentProjects,
     allProjects,
-    projectListEntries,
+    groupedProjects,
+    collapsedGroups,
     groupProjectsEnabled,
     hasProjectGroups,
     knownGroupNames,
@@ -99,7 +100,8 @@
     appVersion: string;
     permanentProjects: string[];
     allProjects: string[];
-    projectListEntries: ProjectListEntry[];
+    groupedProjects: GroupedView;
+    collapsedGroups: ReadonlySet<string>;
     groupProjectsEnabled: boolean;
     hasProjectGroups: boolean;
     knownGroupNames: string[];
@@ -209,7 +211,8 @@
     {isCompactLayout}
     {sortMode}
     {allProjects}
-    {projectListEntries}
+    {groupedProjects}
+    {collapsedGroups}
     {groupProjectsEnabled}
     {hasProjectGroups}
     {knownGroupNames}

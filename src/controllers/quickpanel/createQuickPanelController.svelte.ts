@@ -113,7 +113,7 @@ export function createQuickPanelController(
   let projectColors = $state<Record<string, string>>({});
   let projectGroups = $state<Record<string, string>>({});
   let groupProjectsEnabled = $state(false);
-  let collapsedGroups = $state<Record<string, boolean>>({});
+  let collapsedGroups = $state<Set<string>>(new Set());
   let currentWindowHeight = $state(Infinity);
   const stateSync = createQuickPanelStateSync({
     state,
@@ -148,25 +148,29 @@ export function createQuickPanelController(
     },
   });
 
-  function setGroupProjectsEnabled(value: boolean) {
-    if (groupProjectsEnabled === value) return;
-    groupProjectsEnabled = value;
+  function toggleGroupProjectsEnabled() {
+    if (view.effectiveSortMode === "manual") {
+      return;
+    }
+    groupProjectsEnabled = !groupProjectsEnabled;
     stateSync.queueSettingsSave();
   }
 
-  function toggleGroupProjectsEnabled() {
-    if (view.effectiveSortMode === "manual") {
-      setGroupProjectsEnabled(true);
-      return;
+  function forceGroupProjectsEnabled() {
+    if (!groupProjectsEnabled) {
+      groupProjectsEnabled = true;
+      stateSync.queueSettingsSave();
     }
-    setGroupProjectsEnabled(!groupProjectsEnabled);
   }
 
   function toggleProjectGroupCollapsed(groupName: string) {
-    collapsedGroups = {
-      ...collapsedGroups,
-      [groupName]: !collapsedGroups[groupName],
-    };
+    const next = new Set(collapsedGroups);
+    if (next.has(groupName)) {
+      next.delete(groupName);
+    } else {
+      next.add(groupName);
+    }
+    collapsedGroups = next;
   }
 
   const view = {
@@ -214,8 +218,8 @@ export function createQuickPanelController(
     get groupProjectsEnabled() {
       return this.effectiveSortMode === "manual" || stateSync.getGroupProjectsEnabled();
     },
-    get hasProjectGroups() {
-      return Object.keys(stateSync.getProjectGroups()).length > 0;
+    get collapsedGroups() {
+      return collapsedGroups;
     },
     get knownGroupNames() {
       const groups = stateSync.getProjectGroups();
@@ -233,18 +237,7 @@ export function createQuickPanelController(
         ordered,
         stateSync.getProjectGroups(),
         this.effectiveSortMode,
-        stateSync.getRecentProjects()
-      ).map((entry) =>
-        entry.kind === "group"
-          ? { ...entry, collapsed: collapsedGroups[entry.name] ?? false }
-          : entry
-      );
-    },
-    get groupedProjects() {
-      return this.projectListEntries.map((entry) =>
-        entry.kind === "group"
-          ? { groupName: entry.name, projects: entry.projects }
-          : { groupName: null, projects: [entry.name] }
+        stateSync.getRecentProjects(),
       );
     },
   } as QuickPanelView;
@@ -283,14 +276,14 @@ export function createQuickPanelController(
     state,
     quickPanelBridge,
     loadState: stateSync.loadState,
-    enableGrouping: () => setGroupProjectsEnabled(true),
+    forceGroupProjectsEnabled,
   });
 
   const projectContextMenuActions = createProjectContextMenuController({
     state,
     quickPanelBridge,
     refreshFromCommand: stateSync.refreshFromCommand,
-    enableGrouping: () => setGroupProjectsEnabled(true),
+    forceGroupProjectsEnabled,
   });
 
   const updateActions = createQuickPanelUpdateActions({

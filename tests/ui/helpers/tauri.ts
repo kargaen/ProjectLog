@@ -382,6 +382,13 @@ export async function installTauriMocks(
               ...((args.projectRecentUsage as Record<string, number>) ?? {}),
             };
             clonedState.settings.timesheet_rounding_enabled = Boolean(args.timesheetRoundingEnabled);
+            clonedState.settings.project_colors = {
+              ...((args.projectColors as Record<string, string>) ?? {}),
+            };
+            clonedState.settings.project_groups = {
+              ...((args.projectGroups as Record<string, string>) ?? {}),
+            };
+            clonedState.settings.group_projects_enabled = Boolean(args.groupProjectsEnabled);
             return null;
           case "set_timesheet_rounding_enabled":
             clonedState.settings.timesheet_rounding_enabled = Boolean(args.enabled);

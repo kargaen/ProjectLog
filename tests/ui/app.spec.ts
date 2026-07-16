@@ -166,58 +166,91 @@ test.describe("QuickPanel grouping", () => {
     await stepPause(page);
   });
 
-  test("named groups render as collapsible boxes with indented members and ungrouped rows stay unboxed", async ({ page }) => {
+  test("grouped projects render as boxes with indented members and ungrouped rows stay flat", async ({ page }) => {
     const boxes = page.locator(".project-group-box");
+
     await expect(boxes).toHaveCount(2);
-    await expect(boxes.locator(".project-group-header span:last-child")).toHaveText(["Work", "Personal"]);
+    await expect(boxes.nth(0).locator(".group-header")).toHaveText("Personal");
+    await expect(boxes.nth(0).locator(".group-chevron")).toBeVisible();
+    await expect(boxes.nth(0).locator(".project-row")).toHaveCount(1);
+    await expect(boxes.nth(0).locator(".project-row")).toHaveClass(/project-row-indented/);
+    await expect(boxes.nth(0).locator(".project-button span")).toHaveText("Charlie");
+
+    await expect(boxes.nth(1).locator(".group-header")).toHaveText("Work");
+    await expect(boxes.nth(1).locator(".project-row")).toHaveCount(2);
+    await expect(boxes.nth(1).locator(".project-row").first()).toHaveClass(/project-row-indented/);
+    await expect(boxes.nth(1).locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
+
+    const ungrouped = page.locator(".project-list > .project-row", { hasText: "Alpha" });
+    await expect(ungrouped).toHaveCount(1);
+    await expect(ungrouped).not.toHaveClass(/project-row-indented/);
     await expect(page.getByText("Ungrouped", { exact: true })).toHaveCount(0);
-
-    await expect(boxes.nth(0).locator(".project-row.group-member .project-button span")).toHaveText(["Bravo", "Delta"]);
-    await expect(boxes.nth(1).locator(".project-row.group-member .project-button span")).toHaveText(["Charlie"]);
-    await expect(page.locator(".project-list > .project-row .project-button span")).toHaveText(["Alpha"]);
   });
+  test("collapse toggle hides and restores group members without changing groups", async ({ page }) => {
+    const workBox = page.locator(".project-group-box", { hasText: "Work" });
+    const workHeader = workBox.locator(".group-header");
 
-  test("group boxes collapse and expand without changing group membership", async ({ page }) => {
-    const workBox = page.locator('.project-group-box[data-group-name="Work"]');
-    const workHeader = workBox.locator(".project-group-header");
+    await expect(workBox.locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
+    await expect(workHeader).toHaveAttribute("aria-expanded", "true");
 
-    await expect(workBox.locator(".project-row.group-member .project-button span")).toHaveText(["Bravo", "Delta"]);
     await workHeader.click();
     await expect(workHeader).toHaveAttribute("aria-expanded", "false");
-    await expect(workBox.locator(".project-row.group-member")).toHaveCount(0);
+    await expect(workBox.locator(".project-row")).toHaveCount(0);
 
     await workHeader.click();
     await expect(workHeader).toHaveAttribute("aria-expanded", "true");
-    await expect(workBox.locator(".project-row.group-member .project-button span")).toHaveText(["Bravo", "Delta"]);
+    await expect(workBox.locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
   });
 
-  test("grouping checkbox is locked on in Manual and can toggle grouped rendering outside Manual", async ({ page }) => {
-    const groupToggle = page.getByLabel("Group");
-    await expect(groupToggle).toBeChecked();
-    await expect(groupToggle).toBeDisabled();
+  test("grouping checkbox toggles boxed layout and is locked in manual mode", async ({ page }) => {
+    const checkbox = page.getByLabel("Group");
+
+    await expect(checkbox).toBeChecked();
+    await expect(checkbox).toBeDisabled();
+    await expect(page.locator(".project-group-box")).toHaveCount(2);
 
     await page.getByRole("button", { name: "A-Z" }).click();
-    await expect(groupToggle).toBeEnabled();
-    await groupToggle.uncheck();
+    await expect(checkbox).toBeEnabled();
+    await checkbox.uncheck();
     await expect(page.locator(".project-group-box")).toHaveCount(0);
-    await expect(page.locator(".project-list > .project-row .project-button span")).toHaveText(GROUPED_PROJECTS);
 
-    await groupToggle.check();
+    await checkbox.check();
     await expect(page.locator(".project-group-box")).toHaveCount(2);
   });
-  test("grouping checkbox is hidden when no projects have groups", async ({ page }) => {
+
+});
+
+test.describe("QuickPanel grouping checkbox visibility", () => {
+  test("hides the grouping checkbox when no projects have groups", async ({ page }) => {
+    await installTauriMocks(page, {
+      projects: ["Alpha"],
+      settings: { project_sort_mode: "alphabetical", project_manual_order: ["Alpha"] },
+    });
+    await page.goto("/");
+    await stepPause(page);
+
+    await expect(page.getByLabel("Group")).toHaveCount(0);
+  });
+  test("assigning a group from the context menu forces grouped layout on", async ({ page }) => {
     await installTauriMocks(page, {
       projects: ["Alpha", "Bravo"],
       settings: {
         project_sort_mode: "alphabetical",
         project_manual_order: ["Alpha", "Bravo"],
         group_projects_enabled: false,
-        project_groups: {},
+        project_groups: { Bravo: "Work" },
       },
     });
     await page.goto("/");
+    await stepPause(page);
 
-    await expect(page.getByLabel("Group")).toHaveCount(0);
+    await expect(page.locator(".project-group-box")).toHaveCount(0);
+    await page.locator(".project-row", { hasText: "Alpha" }).click({ button: "right" });
+    await page.locator(".context-menu-item", { hasText: "Work" }).click();
+
+    await expect(page.getByLabel("Group")).toBeChecked();
+    await expect(page.locator(".project-group-box", { hasText: "Work" })).toBeVisible();
+    await expect(page.locator(".project-group-box", { hasText: "Work" }).locator(".project-button span")).toHaveText(["Alpha", "Bravo"]);
   });
 
 });

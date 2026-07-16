@@ -6,13 +6,13 @@ type CreateQuickPanelDialogActionsArgs = {
   state: QuickPanelState;
   quickPanelBridge: QuickPanelBridge;
   loadState: (options?: { preserveMode?: boolean }) => Promise<void>;
-  enableGrouping: () => void;
+  forceGroupProjectsEnabled: () => void;
 };
 
 export function createQuickPanelDialogActions(
   args: CreateQuickPanelDialogActionsArgs
 ) {
-  const { state, quickPanelBridge, loadState, enableGrouping } = args;
+  const { state, quickPanelBridge, loadState, forceGroupProjectsEnabled } = args;
 
   async function submitDialog() {
     const mode = state.dialogMode;
@@ -22,6 +22,7 @@ export function createQuickPanelDialogActions(
       const project = mode.slice(NEW_GROUP_DIALOG_PREFIX.length);
       if (value && project) {
         enableGrouping();
+        forceGroupProjectsEnabled();
         await quickPanelBridge.setProjectGroup(project, value);
       }
     } else {

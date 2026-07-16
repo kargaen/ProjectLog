@@ -60,7 +60,8 @@
     appVersion={state.appState.app_version}
     permanentProjects={state.appState.projects}
     allProjects={view.allProjects}
-    projectListEntries={view.projectListEntries}
+    groupedProjects={view.groupedProjects}
+    collapsedGroups={view.collapsedGroups}
     groupProjectsEnabled={view.groupProjectsEnabled}
     hasProjectGroups={view.hasProjectGroups}
     knownGroupNames={view.knownGroupNames}
