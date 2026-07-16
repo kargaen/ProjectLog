@@ -1,6 +1,6 @@
 # EPIC-009: RC version discipline
 
-**Status:** draft
+**Status:** closed
 **Created:** 2026-07-16
 **Architecture baseline:** cd91662
 
@@ -117,9 +117,9 @@ lingering `X.Y.Z-N` after `X.Y.Z` shipped; a clean unreleased base passes by des
 ## 4. Checklist
 
 ```md
-[ ] 1. Add `scripts/bump.mjs` — done when `node scripts/bump.mjs <type> --dry-run` reproduces every row of the §3 case table, including the error row
-[ ] 2. Add the `bump` script entry to `package.json` — done when `npm run bump -- rc --dry-run` prints `2.4.0-5` (current version `2.4.0-4`)
-[ ] 3. Add the already-released-version guard as the first step of the `check` job in `.github/workflows/release-candidate.yml` — done when the step's script, run locally with a stub `gh` that reports the base as released, exits non-zero with an `::error::` line, and exits zero when it does not; final confirmation on the next real dev push
+[x] 1. Add `scripts/bump.mjs` — done when `node scripts/bump.mjs <type> --dry-run` reproduces every row of the §3 case table, including the error row
+[x] 2. Add the `bump` script entry to `package.json` — done when `npm run bump -- rc --dry-run` prints `2.4.0-5` (current version `2.4.0-4`)
+[x] 3. Add the already-released-version guard as the first step of the `check` job in `.github/workflows/release-candidate.yml` — done when the step's script, run locally with a stub `gh` that reports the base as released, exits non-zero with an `::error::` line, and exits zero when it does not; final confirmation on the next real dev push
 ```
 
 *(No `constitution/13` edit appears here: that is a human decision, tracked in §5.
@@ -134,6 +134,9 @@ lingering `X.Y.Z-N` after `X.Y.Z` shipped; a clean unreleased base passes by des
 - [ ] No change to ARCHITECTURE.md expected
 - [ ] Amends Description sections: `description/12-release-shipping-procedure.md` (via `epic-closeout`, after shipping)
 - [x] **Requires a Constitution change — BLOCKS this epic until resolved.**
+  **Resolved 2026-07-16:** maintainer approved the paste-text below verbatim ("I approve the
+  change to constitution"). Applying it to `constitution/13` is a maintainer action (agents
+  never edit constitution files); implementation proceeds on the approved wording.
 
 `constitution/13-release-branch-model.md` currently says *"There is no manual RC step and no
 RC version number; merging to `dev` produces the candidate."* This epic keeps the per-push
@@ -162,8 +165,8 @@ in the spirit of the trust goal, not a trade against it.
 
 | # | Question | Blocks | Decision needed by |
 |---|---|---|---|
-| Q1 | Should `npm run bump` commit only (proposed default — push stays a deliberate act), or also push so the rc build triggers immediately? | nothing — item 1 implements the default unless overruled | epic-review |
-| Q2 | Is a red workflow run loud enough (GitHub emails the pusher on failure by default), or should the guard also open/annotate something? Proposed: red run is enough. | nothing | epic-review |
+| Q1 | Should `npm run bump` commit only (proposed default — push stays a deliberate act), or also push so the rc build triggers immediately? | nothing — item 1 implements the default unless overruled | epic-review — **default stands (2026-07-16): commit only, no push** |
+| Q2 | Is a red workflow run loud enough (GitHub emails the pusher on failure by default), or should the guard also open/annotate something? Proposed: red run is enough. | nothing | epic-review — **default stands (2026-07-16): red run is enough** |
 
 ### New capability
 
