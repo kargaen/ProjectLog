@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { SortMode } from "../../models/types";
-  import type { ProjectGroupBucket } from "../../controllers/quickpanel/quickPanelTypes";
+  import type { ProjectListEntry } from "../../controllers/quickpanel/quickPanelTypes";
   import AboutDialog from "../components/dialogs/AboutDialog.view.svelte";
   import InputDialog from "../components/dialogs/InputDialog.view.svelte";
   import UpdateDialog from "../components/dialogs/UpdateDialog.view.svelte";
@@ -19,8 +19,9 @@
     appVersion,
     permanentProjects,
     allProjects,
-    groupedProjects,
+    projectListEntries,
     groupProjectsEnabled,
+    hasProjectGroups,
     knownGroupNames,
     projectColors,
     projectGroups,
@@ -51,6 +52,7 @@
     onHide,
     onSetSortMode,
     onToggleGroupProjectsEnabled,
+    onToggleProjectGroupCollapsed,
     onHandleDragOver,
     onHandleDragStart,
     onSelectProject,
@@ -97,8 +99,9 @@
     appVersion: string;
     permanentProjects: string[];
     allProjects: string[];
-    groupedProjects: ProjectGroupBucket[];
+    projectListEntries: ProjectListEntry[];
     groupProjectsEnabled: boolean;
+    hasProjectGroups: boolean;
     knownGroupNames: string[];
     projectColors: Record<string, string>;
     projectGroups: Record<string, string>;
@@ -129,6 +132,7 @@
     onHide: () => void | Promise<void>;
     onSetSortMode: (mode: SortMode) => void;
     onToggleGroupProjectsEnabled: () => void;
+    onToggleProjectGroupCollapsed: (groupName: string) => void;
     onHandleDragOver: (event: MouseEvent, project: string) => void;
     onHandleDragStart: (project: string) => void;
     onSelectProject: (project: string) => void | Promise<void>;
@@ -205,8 +209,9 @@
     {isCompactLayout}
     {sortMode}
     {allProjects}
-    {groupedProjects}
+    {projectListEntries}
     {groupProjectsEnabled}
+    {hasProjectGroups}
     {knownGroupNames}
     {projectColors}
     {projectGroups}
@@ -220,6 +225,7 @@
     {contextMenuPosition}
     onSetSortMode={onSetSortMode}
     onToggleGroupProjectsEnabled={onToggleGroupProjectsEnabled}
+    onToggleProjectGroupCollapsed={onToggleProjectGroupCollapsed}
     onHandleDragOver={onHandleDragOver}
     onHandleDragStart={onHandleDragStart}
     onSelectProject={onSelectProject}

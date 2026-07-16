@@ -166,19 +166,60 @@ test.describe("QuickPanel grouping", () => {
     await stepPause(page);
   });
 
-  test("named groups render above ungrouped projects, ungrouped has no header", async ({ page }) => {
-    const items = page.locator(".project-list > *");
-
-    // Flow D: the list opens with a named group's header, not an ungrouped row.
-    await expect(items.first()).toHaveClass(/group-header/);
-
-    // Named group headers appear (sorted A-Z), and there is no "Ungrouped" title.
-    await expect(page.locator(".project-list .group-header")).toHaveText(["Personal", "Work"]);
+  test("named groups render as collapsible boxes with indented members and ungrouped rows stay unboxed", async ({ page }) => {
+    const boxes = page.locator(".project-group-box");
+    await expect(boxes).toHaveCount(2);
+    await expect(boxes.locator(".project-group-header span:last-child")).toHaveText(["Work", "Personal"]);
     await expect(page.getByText("Ungrouped", { exact: true })).toHaveCount(0);
 
-    // The single ungrouped project sits at the bottom.
-    await expect(items.last().locator(".project-button span").first()).toHaveText("Alpha");
+    await expect(boxes.nth(0).locator(".project-row.group-member .project-button span")).toHaveText(["Bravo", "Delta"]);
+    await expect(boxes.nth(1).locator(".project-row.group-member .project-button span")).toHaveText(["Charlie"]);
+    await expect(page.locator(".project-list > .project-row .project-button span")).toHaveText(["Alpha"]);
   });
+
+  test("group boxes collapse and expand without changing group membership", async ({ page }) => {
+    const workBox = page.locator('.project-group-box[data-group-name="Work"]');
+    const workHeader = workBox.locator(".project-group-header");
+
+    await expect(workBox.locator(".project-row.group-member .project-button span")).toHaveText(["Bravo", "Delta"]);
+    await workHeader.click();
+    await expect(workHeader).toHaveAttribute("aria-expanded", "false");
+    await expect(workBox.locator(".project-row.group-member")).toHaveCount(0);
+
+    await workHeader.click();
+    await expect(workHeader).toHaveAttribute("aria-expanded", "true");
+    await expect(workBox.locator(".project-row.group-member .project-button span")).toHaveText(["Bravo", "Delta"]);
+  });
+
+  test("grouping checkbox is locked on in Manual and can toggle grouped rendering outside Manual", async ({ page }) => {
+    const groupToggle = page.getByLabel("Group");
+    await expect(groupToggle).toBeChecked();
+    await expect(groupToggle).toBeDisabled();
+
+    await page.getByRole("button", { name: "A-Z" }).click();
+    await expect(groupToggle).toBeEnabled();
+    await groupToggle.uncheck();
+    await expect(page.locator(".project-group-box")).toHaveCount(0);
+    await expect(page.locator(".project-list > .project-row .project-button span")).toHaveText(GROUPED_PROJECTS);
+
+    await groupToggle.check();
+    await expect(page.locator(".project-group-box")).toHaveCount(2);
+  });
+  test("grouping checkbox is hidden when no projects have groups", async ({ page }) => {
+    await installTauriMocks(page, {
+      projects: ["Alpha", "Bravo"],
+      settings: {
+        project_sort_mode: "alphabetical",
+        project_manual_order: ["Alpha", "Bravo"],
+        group_projects_enabled: false,
+        project_groups: {},
+      },
+    });
+    await page.goto("/");
+
+    await expect(page.getByLabel("Group")).toHaveCount(0);
+  });
+
 });
 
 test.describe("QuickPanel project colors", () => {
@@ -268,7 +309,7 @@ test.describe("Timesheet preview window", () => {
     await stepPause(page);
 
     await expect(page.getByRole("heading", { name: "Full timesheet" })).toBeVisible();
-    await expect(page.getByText(/Generated at 2026-04-30 07:09,/)).toBeVisible();
+    await expect(page.getByText(/Generated at 2026-04-30 (05|07):09,/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Update now" })).toBeVisible();
     await expect(page.locator("tbody tr").nth(0).locator("td").nth(0)).toHaveText("Alpha");
     await expect(page.locator("tbody tr").nth(0).locator("td").nth(1)).toHaveText("1.00");

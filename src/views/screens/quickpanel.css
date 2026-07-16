@@ -113,7 +113,8 @@ body {
   margin-bottom: 5px;
 }
 
-.quickpanel-screen .sort-row button {
+.quickpanel-screen .sort-row button,
+.quickpanel-screen .group-toggle {
   padding: 4px 6px;
   background: #fff;
   color: #20241f;
@@ -222,24 +223,89 @@ body {
   white-space: nowrap;
 }
 
-/* Full-width strip of the project's true color along the bottom of the row.
-   Absolutely positioned so it stays out of the row's grid flow. */
-.quickpanel-screen .project-color-underline {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
+.quickpanel-screen .group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #c9cebf;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: calc(var(--font-scale, 1) * 11px);
+}
+
+.quickpanel-screen .group-toggle input {
+  flex: none;
+  min-width: auto;
+  margin: 0;
+  padding: 0;
+}
+
+.quickpanel-screen .group-toggle:has(input:checked) {
+  border-color: #267a62;
+  background: #e9f6f1;
+  color: #267a62;
+}
+
+.quickpanel-screen .group-toggle:has(input:disabled) {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.quickpanel-screen .project-color-accent {
+  align-self: stretch;
+  width: 4px;
+  min-height: 26px;
+  border-radius: 999px;
   pointer-events: none;
 }
 
-.quickpanel-screen .group-header {
-  padding: 4px 2px 2px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+.quickpanel-screen .project-row:has(.project-color-accent) {
+  grid-template-columns: 4px 1fr 26px;
+}
+
+.quickpanel-screen .project-row.manual-sort:has(.project-color-accent) {
+  grid-template-columns: 4px 18px 1fr 26px;
+}
+
+.quickpanel-screen .project-row.group-member {
+  margin-left: 12px;
+}
+
+.quickpanel-screen .project-group-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #d8dccc;
+  border-radius: 6px;
+  background: #fbfcfa;
+}
+
+.quickpanel-screen .project-group-header {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 24px;
+  padding: 3px 5px;
+  border: 0;
+  background: transparent;
+  color: #495047;
+  font-weight: 650;
+  text-align: left;
+}
+
+.quickpanel-screen .project-group-header:hover:not(:disabled) {
+  background: #f2f5ee;
+}
+
+.quickpanel-screen .group-chevron {
+  width: 12px;
   color: #697064;
+}
+
+.quickpanel-screen .project-group-members {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .quickpanel-screen .project-row.active .project-button {

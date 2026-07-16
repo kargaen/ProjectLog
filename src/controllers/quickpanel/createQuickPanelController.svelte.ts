@@ -1,6 +1,7 @@
 import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import { type Update } from "@tauri-apps/plugin-updater";
 
+import { buildGroupedView } from "../../lib/groupedView";
 import type {
   ProjectState,
   QuickPanelMode,
@@ -112,6 +113,7 @@ export function createQuickPanelController(
   let projectColors = $state<Record<string, string>>({});
   let projectGroups = $state<Record<string, string>>({});
   let groupProjectsEnabled = $state(false);
+  let collapsedGroups = $state<Record<string, boolean>>({});
   let currentWindowHeight = $state(Infinity);
   const stateSync = createQuickPanelStateSync({
     state,
@@ -146,9 +148,25 @@ export function createQuickPanelController(
     },
   });
 
-  function toggleGroupProjectsEnabled() {
-    groupProjectsEnabled = !groupProjectsEnabled;
+  function setGroupProjectsEnabled(value: boolean) {
+    if (groupProjectsEnabled === value) return;
+    groupProjectsEnabled = value;
     stateSync.queueSettingsSave();
+  }
+
+  function toggleGroupProjectsEnabled() {
+    if (view.effectiveSortMode === "manual") {
+      setGroupProjectsEnabled(true);
+      return;
+    }
+    setGroupProjectsEnabled(!groupProjectsEnabled);
+  }
+
+  function toggleProjectGroupCollapsed(groupName: string) {
+    collapsedGroups = {
+      ...collapsedGroups,
+      [groupName]: !collapsedGroups[groupName],
+    };
   }
 
   const view = {
@@ -194,7 +212,10 @@ export function createQuickPanelController(
       return stateSync.getProjectGroups();
     },
     get groupProjectsEnabled() {
-      return stateSync.getGroupProjectsEnabled();
+      return this.effectiveSortMode === "manual" || stateSync.getGroupProjectsEnabled();
+    },
+    get hasProjectGroups() {
+      return Object.keys(stateSync.getProjectGroups()).length > 0;
     },
     get knownGroupNames() {
       const groups = stateSync.getProjectGroups();
@@ -202,36 +223,29 @@ export function createQuickPanelController(
         a.localeCompare(b)
       );
     },
-    get groupedProjects() {
+    get projectListEntries() {
       const ordered = this.allProjects;
       if (!this.groupProjectsEnabled) {
-        return [{ groupName: null as string | null, projects: ordered }];
+        return ordered.map((name) => ({ kind: "project" as const, name }));
       }
 
-      const groups = stateSync.getProjectGroups();
-      const buckets = new Map<string | null, string[]>();
-      for (const project of ordered) {
-        const groupName = groups[project] ?? null;
-        const bucket = buckets.get(groupName);
-        if (bucket) {
-          bucket.push(project);
-        } else {
-          buckets.set(groupName, [project]);
-        }
-      }
-
-      const ungrouped = buckets.get(null) ?? [];
-      buckets.delete(null);
-      const namedGroups = [...buckets.entries()]
-        .sort(([a], [b]) => (a as string).localeCompare(b as string))
-        .map(([groupName, projects]) => ({ groupName, projects }));
-
-      const result: { groupName: string | null; projects: string[] }[] = [];
-      result.push(...namedGroups);
-      if (ungrouped.length > 0) {
-        result.push({ groupName: null, projects: ungrouped });
-      }
-      return result;
+      return buildGroupedView(
+        ordered,
+        stateSync.getProjectGroups(),
+        this.effectiveSortMode,
+        stateSync.getRecentProjects()
+      ).map((entry) =>
+        entry.kind === "group"
+          ? { ...entry, collapsed: collapsedGroups[entry.name] ?? false }
+          : entry
+      );
+    },
+    get groupedProjects() {
+      return this.projectListEntries.map((entry) =>
+        entry.kind === "group"
+          ? { groupName: entry.name, projects: entry.projects }
+          : { groupName: null, projects: [entry.name] }
+      );
     },
   } as QuickPanelView;
 
@@ -269,12 +283,14 @@ export function createQuickPanelController(
     state,
     quickPanelBridge,
     loadState: stateSync.loadState,
+    enableGrouping: () => setGroupProjectsEnabled(true),
   });
 
   const projectContextMenuActions = createProjectContextMenuController({
     state,
     quickPanelBridge,
     refreshFromCommand: stateSync.refreshFromCommand,
+    enableGrouping: () => setGroupProjectsEnabled(true),
   });
 
   const updateActions = createQuickPanelUpdateActions({
@@ -354,6 +370,7 @@ export function createQuickPanelController(
     openPortfolio: dialogActions.openPortfolio,
     openReleaseNotes: dialogActions.openReleaseNotes,
     toggleGroupProjectsEnabled,
+    toggleProjectGroupCollapsed,
     openProjectContextMenu: projectContextMenuActions.openContextMenu,
     closeProjectContextMenu: projectContextMenuActions.closeContextMenu,
     pickProjectColor: projectContextMenuActions.pickColor,

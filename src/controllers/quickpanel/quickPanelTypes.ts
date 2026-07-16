@@ -40,6 +40,10 @@ export type QuickPanelState = {
   closeInputOnSubmit: boolean;
 };
 
+export type ProjectListEntry =
+  | { kind: "group"; name: string; projects: string[]; collapsed: boolean }
+  | { kind: "project"; name: string };
+
 export type ProjectGroupBucket = {
   groupName: string | null;
   projects: string[];
@@ -53,6 +57,8 @@ export type QuickPanelView = {
   readonly projectColors: Record<string, string>;
   readonly projectGroups: Record<string, string>;
   readonly groupProjectsEnabled: boolean;
+  readonly hasProjectGroups: boolean;
   readonly knownGroupNames: string[];
+  readonly projectListEntries: ProjectListEntry[];
   readonly groupedProjects: ProjectGroupBucket[];
 };

@@ -1,14 +1,15 @@
 <script lang="ts">
   import type { SortMode } from "../../../models/types";
-  import type { ProjectGroupBucket } from "../../../controllers/quickpanel/quickPanelTypes";
+  import type { ProjectListEntry } from "../../../controllers/quickpanel/quickPanelTypes";
   import ProjectContextMenu from "./ProjectContextMenu.view.svelte";
 
   let {
     isCompactLayout,
     sortMode,
     allProjects,
-    groupedProjects,
+    projectListEntries,
     groupProjectsEnabled,
+    hasProjectGroups,
     knownGroupNames,
     projectColors,
     projectGroups,
@@ -22,6 +23,7 @@
     contextMenuPosition,
     onSetSortMode,
     onToggleGroupProjectsEnabled,
+    onToggleProjectGroupCollapsed,
     onHandleDragOver,
     onHandleDragStart,
     onSelectProject,
@@ -36,8 +38,9 @@
     isCompactLayout: boolean;
     sortMode: SortMode;
     allProjects: string[];
-    groupedProjects: ProjectGroupBucket[];
+    projectListEntries: ProjectListEntry[];
     groupProjectsEnabled: boolean;
+    hasProjectGroups: boolean;
     knownGroupNames: string[];
     projectColors: Record<string, string>;
     projectGroups: Record<string, string>;
@@ -51,6 +54,7 @@
     contextMenuPosition: { x: number; y: number } | null;
     onSetSortMode: (mode: SortMode) => void;
     onToggleGroupProjectsEnabled: () => void;
+    onToggleProjectGroupCollapsed: (groupName: string) => void;
     onHandleDragOver: (event: MouseEvent, project: string) => void;
     onHandleDragStart: (project: string) => void;
     onSelectProject: (project: string) => void | Promise<void>;
@@ -64,106 +68,95 @@
   } = $props();
 </script>
 
+{#snippet projectRow(project: string, indented = false)}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class:active={activeProject === project}
+    class:manual-sort={effectiveSortMode === "manual"}
+    class:dragging={draggedProject === project}
+    class:drop-target={dropTargetProject === project}
+    class:drop-after={dropTargetProject === project && dropPosition === "after"}
+    class:group-member={indented}
+    class="project-row"
+    onmousemove={(event) => onHandleDragOver(event, project)}
+    oncontextmenu={(event) => {
+      event.preventDefault();
+      onOpenContextMenu(project, event.clientX, event.clientY);
+    }}
+  >
+    {#if projectColors[project]}
+      <div class="project-color-accent" style="background: {projectColors[project]};"></div>
+    {/if}
+    {#if effectiveSortMode === "manual"}
+      <button
+        class="drag-handle"
+        aria-label="Reorder project"
+        title="Drag to reorder"
+        onmousedown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onHandleDragStart(project);
+        }}
+      >
+        |||
+      </button>
+    {/if}
+    <button class="project-button" onclick={() => onSelectProject(project)}>
+      <span>{project}</span>
+      {#if activeProject === project}<strong>Active</strong>{/if}
+    </button>
+    {#if permanentProjects.includes(project)}
+      <button class="icon-button" title="Remove project" onclick={() => onRemoveProject(project)}>x</button>
+    {:else}
+      <button class="icon-button icon-add" title="Save project" onclick={() => onSaveAdhocProject(project)}>+</button>
+    {/if}
+  </div>
+{/snippet}
+
 <section class="panel project-panel">
   {#if !isCompactLayout}
     <div class="sort-row">
-      <button
-        class:sort-active={sortMode === "manual"}
-        onclick={() => onSetSortMode("manual")}
-      >
-        Manual
-      </button>
-      <button
-        class:sort-active={sortMode === "alphabetical"}
-        onclick={() => onSetSortMode("alphabetical")}
-      >
-        A-Z
-      </button>
-      <button
-        class:sort-active={sortMode === "recent"}
-        onclick={() => onSetSortMode("recent")}
-      >
-        Recent
-      </button>
-      <button
-        class:sort-active={groupProjectsEnabled}
-        onclick={onToggleGroupProjectsEnabled}
-      >
-        Group
-      </button>
+      <button class:sort-active={sortMode === "manual"} onclick={() => onSetSortMode("manual")}>Manual</button>
+      <button class:sort-active={sortMode === "alphabetical"} onclick={() => onSetSortMode("alphabetical")}>A-Z</button>
+      <button class:sort-active={sortMode === "recent"} onclick={() => onSetSortMode("recent")}>Recent</button>
+      {#if hasProjectGroups}
+        <label class="group-toggle" title={effectiveSortMode === "manual" ? "Manual mode requires groups to be enabled" : "Show project groups"}>
+          <input
+            type="checkbox"
+            checked={groupProjectsEnabled}
+            disabled={effectiveSortMode === "manual"}
+            onchange={onToggleGroupProjectsEnabled}
+          />
+          <span>Group</span>
+        </label>
+      {/if}
     </div>
   {/if}
   <div class="project-list">
     {#if allProjects.length === 0}
       <div class="empty">No projects yet.</div>
     {/if}
-    {#each groupedProjects as group}
-      {#if group.groupName}
-        <div class="group-header">{group.groupName}</div>
-      {/if}
-      {#each group.projects as project}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class:active={activeProject === project}
-          class:manual-sort={effectiveSortMode === "manual"}
-          class:dragging={draggedProject === project}
-          class:drop-target={dropTargetProject === project}
-          class:drop-after={dropTargetProject === project &&
-            dropPosition === "after"}
-          class="project-row"
-          onmousemove={(event) => onHandleDragOver(event, project)}
-          oncontextmenu={(event) => {
-            event.preventDefault();
-            onOpenContextMenu(project, event.clientX, event.clientY);
-          }}
-        >
-          {#if effectiveSortMode === "manual"}
-            <button
-              class="drag-handle"
-              aria-label="Reorder project"
-              title="Drag to reorder"
-              onmousedown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onHandleDragStart(project);
-              }}
-            >
-              |||
-            </button>
-          {/if}
-          <button class="project-button" onclick={() => onSelectProject(project)}>
-            <span>{project}</span>
-            {#if activeProject === project}<strong>Active</strong>{/if}
+    {#each projectListEntries as entry}
+      {#if entry.kind === "group"}
+        <section class="project-group-box" data-group-name={entry.name}>
+          <button class="project-group-header" aria-expanded={!entry.collapsed} onclick={() => onToggleProjectGroupCollapsed(entry.name)}>
+            <span class="group-chevron">{entry.collapsed ? "▸" : "▾"}</span>
+            <span>{entry.name}</span>
           </button>
-          {#if permanentProjects.includes(project)}
-            <button
-              class="icon-button"
-              title="Remove project"
-              onclick={() => onRemoveProject(project)}
-            >
-              x
-            </button>
-          {:else}
-            <button
-              class="icon-button icon-add"
-              title="Save project"
-              onclick={() => onSaveAdhocProject(project)}
-            >
-              +
-            </button>
+          {#if !entry.collapsed}
+            <div class="project-group-members">
+              {#each entry.projects as project}
+                {@render projectRow(project, true)}
+              {/each}
+            </div>
           {/if}
-          {#if projectColors[project]}
-            <div
-              class="project-color-underline"
-              style="background: {projectColors[project]};"
-            ></div>
-          {/if}
-        </div>
-      {/each}
+        </section>
+      {:else}
+        {@render projectRow(entry.name)}
+      {/if}
     {/each}
   </div>
 </section>
-
 {#if contextMenuProject && contextMenuPosition}
   <ProjectContextMenu
     x={contextMenuPosition.x}

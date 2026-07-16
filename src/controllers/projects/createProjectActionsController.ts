@@ -189,6 +189,14 @@ export function createProjectActionsController(
       return;
     }
 
+    const groups = view.projectGroups;
+    if ((groups[droppedProject] ?? null) !== (groups[project] ?? null)) {
+      state.draggedProject = null;
+      state.dropTargetProject = null;
+      state.dropPosition = "before";
+      return;
+    }
+
     const order = [...getManualOrder()];
     const from = order.indexOf(droppedProject);
     const targetIndex = order.indexOf(project);
