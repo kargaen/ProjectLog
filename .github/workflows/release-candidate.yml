@@ -27,6 +27,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # EPIC-009: a base version that already shipped as a stable release must never
+      # rebuild as an rc — fail here, before any build work, and leave the current
+      # rc release untouched. `npm run bump -- patch|minor|major` unblocks.
+      - name: Fail if the version was already released
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="$(jq -r .version package.json)"
+          BASE="${VERSION%%-*}"
+          if gh release view "v${BASE}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "::error::Version ${VERSION} has base ${BASE}, which is already published as stable release v${BASE}. Run 'npm run bump -- patch' (or minor/major) and push to build a new release candidate."
+            exit 1
+          fi
+          echo "Version ${VERSION} (base ${BASE}) is not yet released; building rc."
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

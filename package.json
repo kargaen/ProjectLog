@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "release": "node scripts/release.mjs",
+    "bump": "node scripts/bump.mjs",
     "sync-version": "node scripts/sync-version.mjs",
     "version": "npm run sync-version",
     "test": "cd src-tauri && cargo test",

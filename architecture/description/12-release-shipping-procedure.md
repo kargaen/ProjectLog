@@ -2,9 +2,9 @@
 
 ### Release candidates (automatic)
 
-Every push to `dev` (except skills-only pushes — paths under `.claude/skills/**` are ignored) triggers `release-candidate.yml`: it runs `npm run build` and the Rust tests, then publishes a single rolling pre-release under the `rc` tag with the Windows installer, built from the latest `dev` commit. It is unversioned — the same `rc` release and tag are deleted and recreated on each run, so there is only ever one release candidate live. A newer `dev` push cancels an in-flight build. Existing users are not notified (the updater serves only `releases/latest`), and the website is not updated.
+Every push to `dev` (except skills-only pushes — paths under `.claude/skills/**` are ignored) triggers `release-candidate.yml`. Its `check` job first runs the already-released-version guard (EPIC-009): it strips the pre-release suffix from `package.json`'s version and, if a stable release `v<base>` is already published, fails with an `::error::` naming the version and the fixing command (`npm run bump -- patch`), before any build work and leaving the current `rc` untouched. Past the guard it runs `npm run build` and the Rust tests, then publishes a single rolling pre-release under the `rc` tag with the Windows installer, built from the latest `dev` commit. The `rc` release and tag are unversioned — deleted and recreated on each run, so there is only ever one release candidate live — but the installer asset filenames carry `package.json`'s version. A newer `dev` push cancels an in-flight build. Existing users are not notified (the updater serves only `releases/latest`), and the website is not updated.
 
-Producing an RC needs no manual step; merging to `dev` is enough.
+Producing an RC needs no manual step per push; the one manual step per release cycle is the post-release version bump the guard enforces.
 
 ### Versioning mechanics
 
@@ -15,6 +15,14 @@ npm version <new-version>
 ```
 
 This updates `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock` atomically in a single commit, then creates a git tag.
+
+For pre-release bumps between stable releases (EPIC-009), use instead:
+
+```
+npm run bump -- <patch|minor|major|rc> [--dry-run] [--from <version>]
+```
+
+`scripts/bump.mjs` (pinned by `scripts/bump.test.mjs`): `patch`/`minor`/`major` bump the base version and append `-1` (e.g. `2.4.0` → `2.4.1-1`); `rc` increments the numeric pre-release suffix (e.g. `2.4.1-1` → `2.4.1-2`) and errors when there is none. It applies the version via `sync-version.mjs` and commits the four version files — it never creates a git tag and never pushes. `--dry-run` prints the computed version and changes nothing.
 
 ### CHANGELOG.md
 
