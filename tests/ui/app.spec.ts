@@ -195,29 +195,33 @@ test.describe("QuickPanel project colors", () => {
     await stepPause(page);
   });
 
-  test("assigned color shows as a full-color underline strip, not a background fill", async ({ page }) => {
+  test("assigned color shows as a left accent bar, not a background fill or underline", async ({ page }) => {
     const row = page.locator(".project-row", { hasText: "Alpha" });
 
-    // The true (full-opacity) color renders as the underline strip along the row.
-    await expect(row.locator(".project-color-underline")).toHaveCSS(
+    // The true (full-opacity) color renders as a vertical bar at the row's left edge.
+    await expect(row.locator(".project-color-accent")).toHaveCSS(
       "background-color",
       "rgb(63, 143, 209)"
     );
 
-    // It is not a background fill on the title box or the remove/save (×/＋) button.
+    // The bar sits before the text: it is the row's first element.
+    await expect(row.locator("> :first-child")).toHaveClass(/project-color-accent/);
+
+    // No underline strip, and no background fill on the title box or the ×/＋ button.
+    await expect(row.locator(".project-color-underline")).toHaveCount(0);
     await expect(row.locator(".project-button")).not.toHaveCSS("background-color", "rgb(63, 143, 209)");
     await expect(row.locator(".icon-button")).not.toHaveCSS("background-color", "rgb(63, 143, 209)");
   });
 
-  test("clearing the color removes the underline strip", async ({ page }) => {
+  test("clearing the color removes the accent bar", async ({ page }) => {
     const row = page.locator(".project-row", { hasText: "Alpha" });
-    await expect(row.locator(".project-color-underline")).toHaveCount(1);
+    await expect(row.locator(".project-color-accent")).toHaveCount(1);
 
     // Clear the color through the context menu.
     await row.click({ button: "right" });
     await page.getByTitle("Clear color").click();
 
-    await expect(row.locator(".project-color-underline")).toHaveCount(0);
+    await expect(row.locator(".project-color-accent")).toHaveCount(0);
   });
 });
 

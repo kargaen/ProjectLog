@@ -222,7 +222,7 @@ Natural slice boundaries, in dependency order. Later items depend on the view mo
 ```md
 [x] 1. Add failing unit tests for `buildGroupedView` A-Z + Recent two-level ordering (flows 6/7) in a new test file under `tests/ui/` — done when they fail for the right reason
 [x] 2. Implement `buildGroupedView` in `src/lib/groupedView.ts` — done when item 1 passes
-[ ] 3. Add failing Playwright test for the color accent bar (flow 1) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[x] 3. Add failing Playwright test for the color accent bar (flow 1) in `tests/ui/app.spec.ts` — done when it fails for the right reason
 [ ] 4. Replace the underline with a left accent bar in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 3's DOM assertions pass
 [ ] 5. Move accent-bar styling into `src/views/screens/quickpanel.css` (remove `.project-color-underline`) — done when item 3 fully passes
 [ ] 6. Add failing Playwright test for group boxes + indentation + ungrouped-no-box (flow 2) in `tests/ui/app.spec.ts` — done when it fails for the right reason
