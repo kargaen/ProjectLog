@@ -313,6 +313,12 @@ body {
   line-height: 1;
 }
 
+.quickpanel-screen .project-group-members {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .quickpanel-screen .project-row.active .project-button {
   border-color: #267a62;
   background: #e9f6f1;

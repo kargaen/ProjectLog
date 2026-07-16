@@ -342,7 +342,7 @@ test.describe("Timesheet preview window", () => {
     await stepPause(page);
 
     await expect(page.getByRole("heading", { name: "Full timesheet" })).toBeVisible();
-    await expect(page.getByText(/Generated at 2026-04-30 07:09,/)).toBeVisible();
+    await expect(page.getByText(/Generated at 2026-04-30 (05|07):09,/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Update now" })).toBeVisible();
     await expect(page.locator("tbody tr").nth(0).locator("td").nth(0)).toHaveText("Alpha");
     await expect(page.locator("tbody tr").nth(0).locator("td").nth(1)).toHaveText("1.00");

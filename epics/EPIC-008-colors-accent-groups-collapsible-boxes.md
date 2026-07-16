@@ -1,6 +1,6 @@
 # EPIC-008: Colors as left accent, groups as collapsible boxes
 
-**Status:** active
+**Status:** complete
 **Created:** 2026-07-15
 **Architecture baseline:** aef005e
 

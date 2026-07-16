@@ -22,6 +22,7 @@
     groupedProjects,
     collapsedGroups,
     groupProjectsEnabled,
+    hasProjectGroups,
     knownGroupNames,
     projectColors,
     projectGroups,
@@ -102,6 +103,7 @@
     groupedProjects: GroupedView;
     collapsedGroups: ReadonlySet<string>;
     groupProjectsEnabled: boolean;
+    hasProjectGroups: boolean;
     knownGroupNames: string[];
     projectColors: Record<string, string>;
     projectGroups: Record<string, string>;
@@ -212,6 +214,7 @@
     {groupedProjects}
     {collapsedGroups}
     {groupProjectsEnabled}
+    {hasProjectGroups}
     {knownGroupNames}
     {projectColors}
     {projectGroups}

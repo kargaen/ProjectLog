@@ -5,6 +5,103 @@ use tauri::{AppHandle, Manager, Wry};
 
 use crate::AppState;
 
+fn project_id(project: &str) -> String {
+    let mut encoded = String::new();
+    for byte in project.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
+fn project_from_id(id: &str) -> Option<String> {
+    let mut bytes = Vec::new();
+    let raw = id.as_bytes();
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] == b'%' {
+            let hex = std::str::from_utf8(raw.get(i + 1..i + 3)?).ok()?;
+            bytes.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            bytes.push(raw[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(bytes).ok()
+}
+
+fn grouped_level_one(
+    projects: Vec<String>,
+    settings: &crate::settings::UiSettings,
+) -> Vec<(Option<String>, Vec<String>)> {
+    if !settings.group_projects_enabled {
+        return projects
+            .into_iter()
+            .map(|project| (None, vec![project]))
+            .collect();
+    }
+
+    let mut entries: Vec<(Option<String>, Vec<String>)> = Vec::new();
+    for project in projects {
+        if let Some(group) = settings.project_groups.get(&project) {
+            if let Some((_, members)) = entries
+                .iter_mut()
+                .find(|(name, _)| name.as_deref() == Some(group.as_str()))
+            {
+                members.push(project);
+            } else {
+                entries.push((Some(group.clone()), vec![project]));
+            }
+        } else {
+            entries.push((None, vec![project]));
+        }
+    }
+
+    if settings.project_sort_mode == "alphabetical" {
+        entries.sort_by(|(a, ap), (b, bp)| {
+            let an = a.as_ref().unwrap_or(&ap[0]);
+            let bn = b.as_ref().unwrap_or(&bp[0]);
+            an.to_lowercase().cmp(&bn.to_lowercase())
+        });
+        for (_, members) in &mut entries {
+            members.sort_by_key(|name| name.to_lowercase());
+        }
+    } else if settings.project_sort_mode == "recent" {
+        let recency = |members: &Vec<String>| -> u64 {
+            members
+                .iter()
+                .filter_map(|project| settings.project_recent_usage.get(project).copied())
+                .max()
+                .unwrap_or(0)
+        };
+        entries.sort_by(|(a, ap), (b, bp)| {
+            recency(bp).cmp(&recency(ap)).then_with(|| {
+                let an = a.as_ref().unwrap_or(&ap[0]);
+                let bn = b.as_ref().unwrap_or(&bp[0]);
+                an.cmp(bn)
+            })
+        });
+        for (_, members) in &mut entries {
+            members.sort_by(|a, b| {
+                settings
+                    .project_recent_usage
+                    .get(b)
+                    .copied()
+                    .unwrap_or(0)
+                    .cmp(&settings.project_recent_usage.get(a).copied().unwrap_or(0))
+                    .then_with(|| a.cmp(b))
+            });
+        }
+    }
+
+    entries
+}
+
 fn sorted_project_lists(
     projects_list: &[String],
     adhoc_list: &[String],
@@ -100,29 +197,44 @@ pub fn build_menu(app: &AppHandle) -> Result<Menu<Wry>, Box<dyn std::error::Erro
 
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
-    for (idx, project) in sorted_projects.iter().enumerate() {
-        let checked = *active == *project;
-        let item = CheckMenuItem::with_id(
-            app,
-            &format!("select::project::{}", idx),
-            project,
-            true,
-            checked,
-            None::<&str>,
-        )?;
-        menu.append(&item)?;
-    }
-    for (idx, project) in sorted_adhoc.iter().enumerate() {
-        let checked = *active == *project;
-        let item = CheckMenuItem::with_id(
-            app,
-            &format!("select::adhoc::{}", idx),
-            project,
-            true,
-            checked,
-            None::<&str>,
-        )?;
-        menu.append(&item)?;
+    let project_entries = grouped_level_one(
+        sorted_projects
+            .iter()
+            .chain(sorted_adhoc.iter())
+            .cloned()
+            .collect(),
+        &settings,
+    );
+    for (group_name, projects) in project_entries {
+        if let Some(group_name) = group_name {
+            let group_sub = Submenu::with_id(
+                app,
+                &format!("group::{}", project_id(&group_name)),
+                &group_name,
+                true,
+            )?;
+            for project in projects {
+                group_sub.append(&CheckMenuItem::with_id(
+                    app,
+                    &format!("select::{}", project_id(&project)),
+                    &project,
+                    true,
+                    *active == project,
+                    None::<&str>,
+                )?)?;
+            }
+            menu.append(&group_sub)?;
+        } else {
+            let project = &projects[0];
+            menu.append(&CheckMenuItem::with_id(
+                app,
+                &format!("select::{}", project_id(project)),
+                project,
+                true,
+                *active == *project,
+                None::<&str>,
+            )?)?;
+        }
     }
 
     menu.append(&PredefinedMenuItem::separator(app)?)?;
@@ -242,21 +354,8 @@ pub fn build_menu(app: &AppHandle) -> Result<Menu<Wry>, Box<dyn std::error::Erro
     Ok(menu)
 }
 
-pub fn project_from_select_id(app: &AppHandle, id: &str) -> Option<String> {
-    let (kind, idx) = id.split_once("::")?;
-    let idx = idx.parse::<usize>().ok()?;
-
-    let state = app.state::<AppState>();
-    let settings = state.settings.lock().unwrap().clone();
-    let projects = state.projects.lock().unwrap().clone();
-    let adhoc = state.adhoc_projects.lock().unwrap().clone();
-    let (sorted_projects, sorted_adhoc) = sorted_project_lists(&projects, &adhoc, &settings);
-
-    match kind {
-        "project" => sorted_projects.get(idx).cloned(),
-        "adhoc" => sorted_adhoc.get(idx).cloned(),
-        _ => None,
-    }
+pub fn project_from_select_id(_app: &AppHandle, id: &str) -> Option<String> {
+    project_from_id(id)
 }
 
 pub fn project_from_remove_id(app: &AppHandle, id: &str) -> Option<String> {
@@ -267,4 +366,62 @@ pub fn project_from_remove_id(app: &AppHandle, id: &str) -> Option<String> {
     let adhoc = state.adhoc_projects.lock().unwrap().clone();
     let (sorted_projects, _) = sorted_project_lists(&projects, &adhoc, &settings);
     sorted_projects.get(idx).cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{grouped_level_one, project_from_id, project_id};
+    use crate::settings::UiSettings;
+    use std::collections::HashMap;
+
+    #[test]
+    fn project_ids_roundtrip_names_instead_of_positions() {
+        let name = "Client Alpha / Q3::Kickoff";
+        let encoded = project_id(name);
+
+        assert_ne!(encoded, name);
+        assert_eq!(project_from_id(&encoded), Some(name.to_string()));
+    }
+
+    #[test]
+    fn grouped_level_one_builds_recent_ordered_group_submenus() {
+        let settings = UiSettings {
+            group_projects_enabled: true,
+            project_sort_mode: "recent".to_string(),
+            project_groups: HashMap::from([
+                ("Bravo".to_string(), "Work".to_string()),
+                ("Delta".to_string(), "Work".to_string()),
+                ("Charlie".to_string(), "Personal".to_string()),
+            ]),
+            project_recent_usage: HashMap::from([
+                ("Alpha".to_string(), 40),
+                ("Bravo".to_string(), 10),
+                ("Charlie".to_string(), 30),
+                ("Delta".to_string(), 50),
+            ]),
+            ..UiSettings::default()
+        };
+
+        let entries = grouped_level_one(
+            vec![
+                "Alpha".to_string(),
+                "Bravo".to_string(),
+                "Charlie".to_string(),
+                "Delta".to_string(),
+            ],
+            &settings,
+        );
+
+        assert_eq!(
+            entries,
+            vec![
+                (
+                    Some("Work".to_string()),
+                    vec!["Delta".to_string(), "Bravo".to_string()]
+                ),
+                (None, vec!["Alpha".to_string()]),
+                (Some("Personal".to_string()), vec!["Charlie".to_string()]),
+            ]
+        );
+    }
 }

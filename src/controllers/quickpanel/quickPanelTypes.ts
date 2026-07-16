@@ -49,6 +49,7 @@ export type QuickPanelView = {
   readonly projectColors: Record<string, string>;
   readonly projectGroups: Record<string, string>;
   readonly groupProjectsEnabled: boolean;
+  readonly hasProjectGroups: boolean;
   readonly knownGroupNames: string[];
   readonly groupedProjects: GroupedView;
   readonly collapsedGroups: ReadonlySet<string>;

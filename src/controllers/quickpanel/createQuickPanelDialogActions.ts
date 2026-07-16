@@ -21,6 +21,7 @@ export function createQuickPanelDialogActions(
     if (mode.startsWith(NEW_GROUP_DIALOG_PREFIX)) {
       const project = mode.slice(NEW_GROUP_DIALOG_PREFIX.length);
       if (value && project) {
+        enableGrouping();
         forceGroupProjectsEnabled();
         await quickPanelBridge.setProjectGroup(project, value);
       }

@@ -227,7 +227,7 @@ export function createQuickPanelController(
         a.localeCompare(b)
       );
     },
-    get groupedProjects() {
+    get projectListEntries() {
       const ordered = this.allProjects;
       if (!this.groupProjectsEnabled) {
         return ordered.map((name) => ({ kind: "project" as const, name }));

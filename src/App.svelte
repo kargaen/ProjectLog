@@ -63,6 +63,7 @@
     groupedProjects={view.groupedProjects}
     collapsedGroups={view.collapsedGroups}
     groupProjectsEnabled={view.groupProjectsEnabled}
+    hasProjectGroups={view.hasProjectGroups}
     knownGroupNames={view.knownGroupNames}
     projectColors={view.projectColors}
     projectGroups={view.projectGroups}
