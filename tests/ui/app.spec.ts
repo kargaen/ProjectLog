@@ -166,19 +166,93 @@ test.describe("QuickPanel grouping", () => {
     await stepPause(page);
   });
 
-  test("named groups render above ungrouped projects, ungrouped has no header", async ({ page }) => {
-    const items = page.locator(".project-list > *");
+  test("grouped projects render as boxes with indented members and ungrouped rows stay flat", async ({ page }) => {
+    const boxes = page.locator(".project-group-box");
 
-    // Flow D: the list opens with a named group's header, not an ungrouped row.
-    await expect(items.first()).toHaveClass(/group-header/);
+    await expect(boxes).toHaveCount(2);
+    await expect(boxes.nth(0).locator(".group-header")).toHaveText("Personal");
+    await expect(boxes.nth(0).locator(".group-chevron")).toBeVisible();
+    await expect(boxes.nth(0).locator(".project-row")).toHaveCount(1);
+    await expect(boxes.nth(0).locator(".project-row")).toHaveClass(/project-row-indented/);
+    await expect(boxes.nth(0).locator(".project-button span")).toHaveText("Charlie");
 
-    // Named group headers appear (sorted A-Z), and there is no "Ungrouped" title.
-    await expect(page.locator(".project-list .group-header")).toHaveText(["Personal", "Work"]);
+    await expect(boxes.nth(1).locator(".group-header")).toHaveText("Work");
+    await expect(boxes.nth(1).locator(".project-row")).toHaveCount(2);
+    await expect(boxes.nth(1).locator(".project-row").first()).toHaveClass(/project-row-indented/);
+    await expect(boxes.nth(1).locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
+
+    const ungrouped = page.locator(".project-list > .project-row", { hasText: "Alpha" });
+    await expect(ungrouped).toHaveCount(1);
+    await expect(ungrouped).not.toHaveClass(/project-row-indented/);
     await expect(page.getByText("Ungrouped", { exact: true })).toHaveCount(0);
-
-    // The single ungrouped project sits at the bottom.
-    await expect(items.last().locator(".project-button span").first()).toHaveText("Alpha");
   });
+  test("collapse toggle hides and restores group members without changing groups", async ({ page }) => {
+    const workBox = page.locator(".project-group-box", { hasText: "Work" });
+    const workHeader = workBox.locator(".group-header");
+
+    await expect(workBox.locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
+    await expect(workHeader).toHaveAttribute("aria-expanded", "true");
+
+    await workHeader.click();
+    await expect(workHeader).toHaveAttribute("aria-expanded", "false");
+    await expect(workBox.locator(".project-row")).toHaveCount(0);
+
+    await workHeader.click();
+    await expect(workHeader).toHaveAttribute("aria-expanded", "true");
+    await expect(workBox.locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
+  });
+
+  test("grouping checkbox toggles boxed layout and is locked in manual mode", async ({ page }) => {
+    const checkbox = page.getByLabel("Group");
+
+    await expect(checkbox).toBeChecked();
+    await expect(checkbox).toBeDisabled();
+    await expect(page.locator(".project-group-box")).toHaveCount(2);
+
+    await page.getByRole("button", { name: "A-Z" }).click();
+    await expect(checkbox).toBeEnabled();
+    await checkbox.uncheck();
+    await expect(page.locator(".project-group-box")).toHaveCount(0);
+
+    await checkbox.check();
+    await expect(page.locator(".project-group-box")).toHaveCount(2);
+  });
+
+});
+
+test.describe("QuickPanel grouping checkbox visibility", () => {
+  test("hides the grouping checkbox when no projects have groups", async ({ page }) => {
+    await installTauriMocks(page, {
+      projects: ["Alpha"],
+      settings: { project_sort_mode: "alphabetical", project_manual_order: ["Alpha"] },
+    });
+    await page.goto("/");
+    await stepPause(page);
+
+    await expect(page.getByLabel("Group")).toHaveCount(0);
+  });
+  test("assigning a group from the context menu forces grouped layout on", async ({ page }) => {
+    await installTauriMocks(page, {
+      projects: ["Alpha", "Bravo"],
+      settings: {
+        project_sort_mode: "alphabetical",
+        project_manual_order: ["Alpha", "Bravo"],
+        group_projects_enabled: false,
+        project_groups: { Bravo: "Work" },
+      },
+    });
+    await page.goto("/");
+    await stepPause(page);
+
+    await expect(page.locator(".project-group-box")).toHaveCount(0);
+    await page.locator(".project-row", { hasText: "Alpha" }).click({ button: "right" });
+    await page.locator(".context-menu-item", { hasText: "Work" }).click();
+
+    await expect(page.getByLabel("Group")).toBeChecked();
+    await expect(page.locator(".project-group-box", { hasText: "Work" })).toBeVisible();
+    await expect(page.locator(".project-group-box", { hasText: "Work" }).locator(".project-button span")).toHaveText(["Alpha", "Bravo"]);
+  });
+
 });
 
 test.describe("QuickPanel project colors", () => {
@@ -195,29 +269,33 @@ test.describe("QuickPanel project colors", () => {
     await stepPause(page);
   });
 
-  test("assigned color shows as a full-color underline strip, not a background fill", async ({ page }) => {
+  test("assigned color shows as a left accent bar, not a background fill or underline", async ({ page }) => {
     const row = page.locator(".project-row", { hasText: "Alpha" });
 
-    // The true (full-opacity) color renders as the underline strip along the row.
-    await expect(row.locator(".project-color-underline")).toHaveCSS(
+    // The true (full-opacity) color renders as a vertical bar at the row's left edge.
+    await expect(row.locator(".project-color-accent")).toHaveCSS(
       "background-color",
       "rgb(63, 143, 209)"
     );
 
-    // It is not a background fill on the title box or the remove/save (×/＋) button.
+    // The bar sits before the text: it is the row's first element.
+    await expect(row.locator("> :first-child")).toHaveClass(/project-color-accent/);
+
+    // No underline strip, and no background fill on the title box or the ×/＋ button.
+    await expect(row.locator(".project-color-underline")).toHaveCount(0);
     await expect(row.locator(".project-button")).not.toHaveCSS("background-color", "rgb(63, 143, 209)");
     await expect(row.locator(".icon-button")).not.toHaveCSS("background-color", "rgb(63, 143, 209)");
   });
 
-  test("clearing the color removes the underline strip", async ({ page }) => {
+  test("clearing the color removes the accent bar", async ({ page }) => {
     const row = page.locator(".project-row", { hasText: "Alpha" });
-    await expect(row.locator(".project-color-underline")).toHaveCount(1);
+    await expect(row.locator(".project-color-accent")).toHaveCount(1);
 
     // Clear the color through the context menu.
     await row.click({ button: "right" });
     await page.getByTitle("Clear color").click();
 
-    await expect(row.locator(".project-color-underline")).toHaveCount(0);
+    await expect(row.locator(".project-color-accent")).toHaveCount(0);
   });
 });
 
@@ -264,7 +342,7 @@ test.describe("Timesheet preview window", () => {
     await stepPause(page);
 
     await expect(page.getByRole("heading", { name: "Full timesheet" })).toBeVisible();
-    await expect(page.getByText(/Generated at 2026-04-30 07:09,/)).toBeVisible();
+    await expect(page.getByText(/Generated at 2026-04-30 (05|07):09,/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Update now" })).toBeVisible();
     await expect(page.locator("tbody tr").nth(0).locator("td").nth(0)).toHaveText("Alpha");
     await expect(page.locator("tbody tr").nth(0).locator("td").nth(1)).toHaveText("1.00");

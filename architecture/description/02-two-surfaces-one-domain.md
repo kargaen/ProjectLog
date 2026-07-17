@@ -16,7 +16,7 @@ A floating Tauri window with full access to all features:
 
 A native system tray menu that mirrors core QuickPanel actions without requiring the window to be open:
 
-- Project list for direct activation
+- Project list for direct activation, with named groups shown as native submenus when grouping is enabled
 - Set comment
 - Add / Quick add / Remove project
 - Generate timesheet (range submenu), Open log file, Reset timesheet, Reset projects

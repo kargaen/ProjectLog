@@ -49,8 +49,16 @@ pub(crate) fn add_project_value(state: &AppState, value: &str) {
 
     let mut projs = state.projects.lock().unwrap();
     if !projs.contains(&value) {
-        projs.push(value);
+        projs.push(value.clone());
         projects::save(&state.data_dir, &projs);
+    }
+    drop(projs);
+
+    let mut settings = state.settings.lock().unwrap();
+    if !settings.project_recent_usage.contains_key(&value) {
+        let timestamp = next_recent_usage_timestamp(&settings);
+        settings.project_recent_usage.insert(value, timestamp);
+        crate::settings::save(&state.data_dir, &settings);
     }
 }
 
@@ -70,7 +78,7 @@ pub(crate) fn quick_project_value(state: &AppState, value: &str) {
     if !in_permanent {
         let mut adhoc = state.adhoc_projects.lock().unwrap();
         if !adhoc.contains(&value) {
-            adhoc.push(value);
+            adhoc.push(value.clone());
         }
     }
 }

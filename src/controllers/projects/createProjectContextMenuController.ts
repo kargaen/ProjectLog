@@ -13,12 +13,13 @@ type CreateProjectContextMenuControllerArgs = {
     command: Promise<T>,
     options?: { preserveMode?: boolean }
   ) => Promise<T>;
+  forceGroupProjectsEnabled: () => void;
 };
 
 export function createProjectContextMenuController(
   args: CreateProjectContextMenuControllerArgs
 ) {
-  const { state, quickPanelBridge, refreshFromCommand } = args;
+  const { state, quickPanelBridge, refreshFromCommand, forceGroupProjectsEnabled } = args;
 
   function openContextMenu(project: string, x: number, y: number) {
     state.contextMenuProject = project;
@@ -51,6 +52,9 @@ export function createProjectContextMenuController(
     }
 
     log.info("pickGroup", { project, group });
+    if (group) {
+      forceGroupProjectsEnabled();
+    }
     closeContextMenu();
     await refreshFromCommand(
       quickPanelBridge.setProjectGroup(project, group),
@@ -64,6 +68,7 @@ export function createProjectContextMenuController(
       return;
     }
 
+    forceGroupProjectsEnabled();
     closeContextMenu();
     state.dialogMode = `${NEW_GROUP_DIALOG_PREFIX}${project}`;
     state.dialogTitle = "New group name:";

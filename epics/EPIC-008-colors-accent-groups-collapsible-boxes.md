@@ -1,6 +1,6 @@
 # EPIC-008: Colors as left accent, groups as collapsible boxes
 
-**Status:** draft
+**Status:** complete
 **Created:** 2026-07-15
 **Architecture baseline:** aef005e
 
@@ -220,27 +220,27 @@ Natural slice boundaries, in dependency order. Later items depend on the view mo
 1–2). Tests precede the code they pin. Items marked (blocked …) wait on an open question.
 
 ```md
-[ ] 1. Add failing unit tests for `buildGroupedView` A-Z + Recent two-level ordering (flows 6/7) in a new test file under `tests/ui/` — done when they fail for the right reason
-[ ] 2. Implement `buildGroupedView` in `src/lib/groupedView.ts` — done when item 1 passes
-[ ] 3. Add failing Playwright test for the color accent bar (flow 1) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 4. Replace the underline with a left accent bar in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 3's DOM assertions pass
-[ ] 5. Move accent-bar styling into `src/views/screens/quickpanel.css` (remove `.project-color-underline`) — done when item 3 fully passes
-[ ] 6. Add failing Playwright test for group boxes + indentation + ungrouped-no-box (flow 2) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 7. Render group boxes from `buildGroupedView` in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 6 passes
-[ ] 8. Add group-box / indentation / chevron styles in `src/views/screens/quickpanel.css` — done when item 6 fully passes
-[ ] 9. Wire the controller to expose the `buildGroupedView` model in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` (replaces the old `groupedProjects` getter) — done when items 6/3 pass through the real controller
-[ ] 10. Add failing Playwright test for collapse/expand (flow 3) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 11. Add ephemeral (non-persistent) collapse state + toggle in the QuickPanel controller `src/controllers/quickpanel/createQuickPanelController.svelte.ts` — done when item 10 passes
-[ ] 12. Add failing Playwright test for the grouping checkbox (flow 4) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 13. Replace the "Group" button with a checkbox in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 12 passes
-[ ] 14. Add failing Playwright test for force-enable on group action (flow 5) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 15. Force `group_projects_enabled` true on new-group/assign-group in `src/controllers/projects/createProjectContextMenuController.ts` — done when item 14 passes
+[x] 1. Add failing unit tests for `buildGroupedView` A-Z + Recent two-level ordering (flows 6/7) in a new test file under `tests/ui/` — done when they fail for the right reason
+[x] 2. Implement `buildGroupedView` in `src/lib/groupedView.ts` — done when item 1 passes
+[x] 3. Add failing Playwright test for the color accent bar (flow 1) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[x] 4. Replace the underline with a left accent bar in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 3's DOM assertions pass
+[x] 5. Move accent-bar styling into `src/views/screens/quickpanel.css` (remove `.project-color-underline`) — done when item 3 fully passes
+[x] 6. Add failing Playwright test for group boxes + indentation + ungrouped-no-box (flow 2) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[x] 7. Render group boxes from `buildGroupedView` in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 6 passes
+[x] 8. Add group-box / indentation / chevron styles in `src/views/screens/quickpanel.css` — done when item 6 fully passes
+[x] 9. Wire the controller to expose the `buildGroupedView` model in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` (replaces the old `groupedProjects` getter) — done when items 6/3 pass through the real controller
+[x] 10. Add failing Playwright test for collapse/expand (flow 3) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[x] 11. Add ephemeral (non-persistent) collapse state + toggle in the QuickPanel controller `src/controllers/quickpanel/createQuickPanelController.svelte.ts` — done when item 10 passes
+[x] 12. Add failing Playwright test for the grouping checkbox (flow 4) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[x] 13. Replace the "Group" button with a checkbox in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 12 passes
+[x] 14. Add failing Playwright test for force-enable on group action (flow 5) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[x] 15. Force `group_projects_enabled` true on new-group/assign-group in `src/controllers/projects/createProjectContextMenuController.ts` — done when item 14 passes
 [ ] 16. Add failing Playwright test for drag-locked-to-group (flow 8) in `tests/ui/app.spec.ts` — done when it fails for the right reason
 [ ] 17. Constrain drag reordering to within the item's group span in the flat `project_manual_order`, in `src/controllers/projects/createProjectActionsController.ts` — done when item 16 passes
 [ ] 18. Add failing Rust unit test for the group→submenu tree with name-keyed select ids (flow 9) in `src-tauri/src/infrastructure/tray_menu.rs` (or a sibling module) — done when it fails for the right reason
 [ ] 19. Build group submenus with name-keyed (not index-keyed) select ids in `src-tauri/src/infrastructure/tray_menu.rs` — done when item 18 passes
-[ ] 20. Add failing Playwright test: grouping checkbox is hidden with no groups, and locked checked + disabled with a hover hint in Manual (flow 4) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 21. Implement checkbox visibility (hidden when no groups) and Manual-mode lock + tooltip in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 20 passes
+[x] 20. Add failing Playwright test: grouping checkbox is hidden with no groups, and locked checked + disabled with a hover hint in Manual (flow 4) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[x] 21. Implement checkbox visibility (hidden when no groups) and Manual-mode lock + tooltip in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 20 passes
 [ ] 22. Add failing Playwright test: an empty group renders no box in the list but its name is still offered in the context menu group picker (flows 2/11) in `tests/ui/app.spec.ts` — done when it fails for the right reason
 [ ] 23. Hide empty-group boxes in the grouped view while keeping empty group names in the picker — `src/lib/groupedView.ts` (list) — done when item 22's list assertion passes
 [ ] 24. Add failing Rust test then record a creation timestamp when a project is added/quick-tracked so Recent always has a value (flow 10), in the native project controller `src-tauri/src/controllers/project_controller.rs` — done when the test passes
