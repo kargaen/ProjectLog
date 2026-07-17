@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { SortMode } from "../../models/types";
-  import type { ProjectGroupBucket } from "../../controllers/quickpanel/quickPanelTypes";
+  import type { GroupedView } from "../../lib/groupedView";
   import AboutDialog from "../components/dialogs/AboutDialog.view.svelte";
   import InputDialog from "../components/dialogs/InputDialog.view.svelte";
   import UpdateDialog from "../components/dialogs/UpdateDialog.view.svelte";
@@ -20,7 +20,9 @@
     permanentProjects,
     allProjects,
     groupedProjects,
+    collapsedGroups,
     groupProjectsEnabled,
+    hasProjectGroups,
     knownGroupNames,
     projectColors,
     projectGroups,
@@ -51,6 +53,7 @@
     onHide,
     onSetSortMode,
     onToggleGroupProjectsEnabled,
+    onToggleProjectGroupCollapsed,
     onHandleDragOver,
     onHandleDragStart,
     onSelectProject,
@@ -97,8 +100,10 @@
     appVersion: string;
     permanentProjects: string[];
     allProjects: string[];
-    groupedProjects: ProjectGroupBucket[];
+    groupedProjects: GroupedView;
+    collapsedGroups: ReadonlySet<string>;
     groupProjectsEnabled: boolean;
+    hasProjectGroups: boolean;
     knownGroupNames: string[];
     projectColors: Record<string, string>;
     projectGroups: Record<string, string>;
@@ -129,6 +134,7 @@
     onHide: () => void | Promise<void>;
     onSetSortMode: (mode: SortMode) => void;
     onToggleGroupProjectsEnabled: () => void;
+    onToggleProjectGroupCollapsed: (groupName: string) => void;
     onHandleDragOver: (event: MouseEvent, project: string) => void;
     onHandleDragStart: (project: string) => void;
     onSelectProject: (project: string) => void | Promise<void>;
@@ -206,7 +212,9 @@
     {sortMode}
     {allProjects}
     {groupedProjects}
+    {collapsedGroups}
     {groupProjectsEnabled}
+    {hasProjectGroups}
     {knownGroupNames}
     {projectColors}
     {projectGroups}
@@ -220,6 +228,7 @@
     {contextMenuPosition}
     onSetSortMode={onSetSortMode}
     onToggleGroupProjectsEnabled={onToggleGroupProjectsEnabled}
+    onToggleProjectGroupCollapsed={onToggleProjectGroupCollapsed}
     onHandleDragOver={onHandleDragOver}
     onHandleDragStart={onHandleDragStart}
     onSelectProject={onSelectProject}

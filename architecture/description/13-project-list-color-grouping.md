@@ -17,8 +17,16 @@ Command wrappers live in `src-tauri/src/commands/settings_commands.rs`; the logi
 
 ### Rendering
 
-- An assigned color renders as a full-width strip of the true color (`.project-color-underline`) along the bottom of the project row — not a background fill on the title box or the remove/save (×/＋) icon button.
-- When `group_projects_enabled`, the `groupedProjects` getter in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` buckets the sorted project list by group and returns named groups (A–Z, each under a header) first, then the ungrouped bucket last with no header.
+`src/lib/groupedView.ts` exports `buildGroupedView`, the shared two-level project-list view model. Level one mixes named group boxes and ungrouped project rows. A-Z mode sorts group names and ungrouped project names together, with members sorted A-Z inside each group. Recent mode sorts each group by its most recent member timestamp (`T_group = max(member timestamps)`) and sorts members by recency. Manual mode keeps the existing manual order and uses the first member position as the group position.
+
+- An assigned color renders as a vertical left-edge accent bar (`.project-color-accent`) before the row text. Project rows no longer use a background fill or bottom underline for color.
+- When grouping is enabled, `projectListEntries` in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` maps `buildGroupedView` output into collapsible group entries. Collapse state is ephemeral frontend state only and is not persisted.
+- `src/views/components/projects/ProjectListPanel.view.svelte` renders each non-empty group as a bordered `.project-group-box` with a chevron/header and indented `.group-member` project rows. Ungrouped projects render as normal top-level rows with no group box and no "Ungrouped" heading.
+- The sort-row grouping control is a checkbox. It is hidden when no project has a group, and Manual sort mode forces grouping on and disables the checkbox because drag reordering is constrained to the current group span.
+
+### Tray menu grouping
+
+The native tray menu uses the same project color/group settings for structure, but not color or collapse UI. When `group_projects_enabled` is true, `src-tauri/src/infrastructure/tray_menu.rs` builds one submenu per non-empty group and leaves ungrouped projects as top-level menu items. Project selection IDs are derived from the project name rather than from positional indices so activation remains stable when items move into submenus or reorder.
 
 ### Context-menu placement
 
