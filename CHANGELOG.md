@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Project list colors now render as left-edge accents, groups render as collapsible boxes, manual drag stays within a project's current group, and empty group names remain reusable from the context menu. (EPIC-008)
 - Architecture rewrite: domain-based folder structure, split bridge services, MVC layer separation
 - Rounding is now applied on export (Excel), not just on the preview display
 - Fixed total row double-counting comment hours when rounding is enabled
