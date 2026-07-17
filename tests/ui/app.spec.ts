@@ -170,16 +170,16 @@ test.describe("QuickPanel grouping", () => {
     const boxes = page.locator(".project-group-box");
 
     await expect(boxes).toHaveCount(2);
-    await expect(boxes.nth(0).locator(".group-header")).toHaveText("Personal");
+    await expect(boxes.nth(0).locator(".group-header span").last()).toHaveText("Work");
     await expect(boxes.nth(0).locator(".group-chevron")).toBeVisible();
-    await expect(boxes.nth(0).locator(".project-row")).toHaveCount(1);
-    await expect(boxes.nth(0).locator(".project-row")).toHaveClass(/project-row-indented/);
-    await expect(boxes.nth(0).locator(".project-button span")).toHaveText("Charlie");
+    await expect(boxes.nth(0).locator(".project-row")).toHaveCount(2);
+    await expect(boxes.nth(0).locator(".project-row").first()).toHaveClass(/project-row-indented/);
+    await expect(boxes.nth(0).locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
 
-    await expect(boxes.nth(1).locator(".group-header")).toHaveText("Work");
-    await expect(boxes.nth(1).locator(".project-row")).toHaveCount(2);
-    await expect(boxes.nth(1).locator(".project-row").first()).toHaveClass(/project-row-indented/);
-    await expect(boxes.nth(1).locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
+    await expect(boxes.nth(1).locator(".group-header span").last()).toHaveText("Personal");
+    await expect(boxes.nth(1).locator(".project-row")).toHaveCount(1);
+    await expect(boxes.nth(1).locator(".project-row")).toHaveClass(/project-row-indented/);
+    await expect(boxes.nth(1).locator(".project-button span")).toHaveText("Charlie");
 
     const ungrouped = page.locator(".project-list > .project-row", { hasText: "Alpha" });
     await expect(ungrouped).toHaveCount(1);
@@ -203,7 +203,7 @@ test.describe("QuickPanel grouping", () => {
   });
 
   test("grouping checkbox toggles boxed layout and is locked in manual mode", async ({ page }) => {
-    const checkbox = page.getByLabel("Group");
+    const checkbox = page.getByRole("checkbox", { name: "Group" });
 
     await expect(checkbox).toBeChecked();
     await expect(checkbox).toBeDisabled();
@@ -216,6 +216,33 @@ test.describe("QuickPanel grouping", () => {
 
     await checkbox.check();
     await expect(page.locator(".project-group-box")).toHaveCount(2);
+  });
+
+  test("manual drag reorders projects only within their current group", async ({ page }) => {
+    async function dragProjectTo(project: string, target: string, targetRatio: number) {
+      const source = page.locator(".project-row", { has: page.getByRole("button", { name: project }) });
+      const targetRow = page.locator(".project-row", { has: page.getByRole("button", { name: target }) });
+      const sourceBox = await source.locator(".drag-handle").boundingBox();
+      const targetBox = await targetRow.boundingBox();
+
+      expect(sourceBox).not.toBeNull();
+      expect(targetBox).not.toBeNull();
+
+      await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height * targetRatio);
+      await page.mouse.up();
+    }
+
+    const labels = page.locator(".project-button span");
+
+    await expect(labels).toHaveText(["Alpha", "Bravo", "Delta", "Charlie"]);
+
+    await dragProjectTo("Bravo", "Delta", 0.75);
+    await expect(labels).toHaveText(["Alpha", "Delta", "Bravo", "Charlie"]);
+
+    await dragProjectTo("Bravo", "Charlie", 0.75);
+    await expect(labels).toHaveText(["Alpha", "Delta", "Bravo", "Charlie"]);
   });
 
 });
@@ -248,9 +275,33 @@ test.describe("QuickPanel grouping checkbox visibility", () => {
     await page.locator(".project-row", { hasText: "Alpha" }).click({ button: "right" });
     await page.locator(".context-menu-item", { hasText: "Work" }).click();
 
-    await expect(page.getByLabel("Group")).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: "Group" })).toBeChecked();
     await expect(page.locator(".project-group-box", { hasText: "Work" })).toBeVisible();
     await expect(page.locator(".project-group-box", { hasText: "Work" }).locator(".project-button span")).toHaveText(["Alpha", "Bravo"]);
+  });
+
+  test("empty groups are hidden from the list but remain pickable", async ({ page }) => {
+    await installTauriMocks(page, {
+      projects: ["Alpha", "Bravo"],
+      settings: {
+        project_sort_mode: "alphabetical",
+        project_manual_order: ["Alpha", "Bravo"],
+        group_projects_enabled: true,
+        project_groups: { Bravo: "Work" },
+      },
+    });
+    await page.goto("/");
+    await stepPause(page);
+
+    await expect(page.locator(".project-group-box", { hasText: "Work" })).toBeVisible();
+
+    await page.locator(".project-row", { hasText: "Bravo" }).click({ button: "right" });
+    await page.locator(".context-menu-item", { hasText: "Ungrouped" }).click();
+
+    await expect(page.locator(".project-group-box", { hasText: "Work" })).toHaveCount(0);
+
+    await page.locator(".project-row", { hasText: "Alpha" }).click({ button: "right" });
+    await expect(page.locator(".context-menu-item", { hasText: "Work" })).toBeVisible();
   });
 
 });

@@ -52,14 +52,14 @@ export function createProjectContextMenuController(
     }
 
     log.info("pickGroup", { project, group });
-    if (group) {
-      forceGroupProjectsEnabled();
-    }
     closeContextMenu();
     await refreshFromCommand(
       quickPanelBridge.setProjectGroup(project, group),
       { preserveMode: true }
     );
+    if (group) {
+      forceGroupProjectsEnabled();
+    }
   }
 
   function requestNewGroup() {

@@ -1,8 +1,8 @@
 # EPIC-008: Colors as left accent, groups as collapsible boxes
 
-**Status:** complete
+**Status:** closed
 **Created:** 2026-07-15
-**Architecture baseline:** aef005e
+**Architecture baseline:** c2bdbd3
 
 Redesigns the QuickPanel project color/grouping UI toward two user mockups: color as a
 vertical left-edge accent bar before the text, and groups as bordered collapsible boxes with
@@ -235,15 +235,15 @@ Natural slice boundaries, in dependency order. Later items depend on the view mo
 [x] 13. Replace the "Group" button with a checkbox in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 12 passes
 [x] 14. Add failing Playwright test for force-enable on group action (flow 5) in `tests/ui/app.spec.ts` — done when it fails for the right reason
 [x] 15. Force `group_projects_enabled` true on new-group/assign-group in `src/controllers/projects/createProjectContextMenuController.ts` — done when item 14 passes
-[ ] 16. Add failing Playwright test for drag-locked-to-group (flow 8) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 17. Constrain drag reordering to within the item's group span in the flat `project_manual_order`, in `src/controllers/projects/createProjectActionsController.ts` — done when item 16 passes
-[ ] 18. Add failing Rust unit test for the group→submenu tree with name-keyed select ids (flow 9) in `src-tauri/src/infrastructure/tray_menu.rs` (or a sibling module) — done when it fails for the right reason
-[ ] 19. Build group submenus with name-keyed (not index-keyed) select ids in `src-tauri/src/infrastructure/tray_menu.rs` — done when item 18 passes
+[x] 16. Add failing Playwright test for drag-locked-to-group (flow 8) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[x] 17. Constrain drag reordering to within the item's group span in the flat `project_manual_order`, in `src/controllers/projects/createProjectActionsController.ts` — done when item 16 passes
+[x] 18. Add failing Rust unit test for the group→submenu tree with name-keyed select ids (flow 9) in `src-tauri/src/infrastructure/tray_menu.rs` (or a sibling module) — done when it fails for the right reason
+[x] 19. Build group submenus with name-keyed (not index-keyed) select ids in `src-tauri/src/infrastructure/tray_menu.rs` — done when item 18 passes
 [x] 20. Add failing Playwright test: grouping checkbox is hidden with no groups, and locked checked + disabled with a hover hint in Manual (flow 4) in `tests/ui/app.spec.ts` — done when it fails for the right reason
 [x] 21. Implement checkbox visibility (hidden when no groups) and Manual-mode lock + tooltip in `src/views/components/projects/ProjectListPanel.view.svelte` — done when item 20 passes
-[ ] 22. Add failing Playwright test: an empty group renders no box in the list but its name is still offered in the context menu group picker (flows 2/11) in `tests/ui/app.spec.ts` — done when it fails for the right reason
-[ ] 23. Hide empty-group boxes in the grouped view while keeping empty group names in the picker — `src/lib/groupedView.ts` (list) — done when item 22's list assertion passes
-[ ] 24. Add failing Rust test then record a creation timestamp when a project is added/quick-tracked so Recent always has a value (flow 10), in the native project controller `src-tauri/src/controllers/project_controller.rs` — done when the test passes
+[x] 22. Add failing Playwright test: an empty group renders no box in the list but its name is still offered in the context menu group picker (flows 2/11) in `tests/ui/app.spec.ts` — done when it fails for the right reason
+[x] 23. Hide empty-group boxes in the grouped view while keeping empty group names in the picker — `src/lib/groupedView.ts` (list) — done when item 22's list assertion passes
+[x] 24. Add failing Rust test then record a creation timestamp when a project is added/quick-tracked so Recent always has a value (flow 10), in the native project controller `src-tauri/src/controllers/project_controller.rs` — done when the test passes
 ```
 
 ---
