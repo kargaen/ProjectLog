@@ -147,12 +147,17 @@ export async function installTauriMocks(
     ],
   };
 
-  await page.addInitScript((
-    state: MockProjectState,
-    currentWindowLabel: string,
-    initialPreviewRequest: MockPreviewRequest | null,
-    initialPreviewResponse: MockPreview
-  ) => {
+  await page.addInitScript(({
+    state,
+    currentWindowLabel,
+    initialPreviewRequest,
+    initialPreviewResponse,
+  }: {
+    state: MockProjectState;
+    currentWindowLabel: string;
+    initialPreviewRequest: MockPreviewRequest | null;
+    initialPreviewResponse: MockPreview;
+  }) => {
     const params = new URLSearchParams(window.location.search);
     const queryWindowLabel = params.get("mockWindowLabel");
     const queryPreviewRange = params.get("mockPreviewRange") as MockPreviewRequest["range"] | null;
@@ -504,9 +509,10 @@ export async function installTauriMocks(
     };
 
     setupMocks(state, currentWindowLabel, initialPreviewRequest, initialPreviewResponse);
-  },
-  mergedState,
-  options?.currentWindowLabel ?? "main",
-  options?.initialPreviewRequest ?? null,
-  previewResponse);
+  }, {
+    state: mergedState,
+    currentWindowLabel: options?.currentWindowLabel ?? "main",
+    initialPreviewRequest: options?.initialPreviewRequest ?? null,
+    initialPreviewResponse: previewResponse,
+  });
 }
