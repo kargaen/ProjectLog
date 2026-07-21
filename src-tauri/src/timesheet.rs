@@ -9,9 +9,17 @@ pub use crate::services::timesheet_service::preview;
 mod tests {
     use super::*;
     use std::fs;
+    use std::process::Command;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use chrono::{Datelike, Local, TimeDelta};
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    struct CurrentWeekCases {
+        with_current_week: Vec<i64>,
+        without_current_week: Vec<i64>,
+    }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
         let stamp = SystemTime::now()
@@ -43,6 +51,34 @@ mod tests {
             format!("{} 09:15:00\tAlpha\tDelivery", today.format("%Y-%m-%d")),
             format!("{} 12:15:00\t", today.format("%Y-%m-%d")),
         ]
+    }
+
+    fn current_week_cases() -> CurrentWeekCases {
+        serde_json::from_str(include_str!("../../tests/timesheet-current-week.json")).unwrap()
+    }
+
+    fn build_week_offset_log(offsets: &[i64]) -> Vec<String> {
+        let today = Local::now().naive_local().date();
+        let monday = today - TimeDelta::days(today.weekday().num_days_from_monday() as i64);
+        offsets
+            .iter()
+            .flat_map(|offset| {
+                let date = monday + TimeDelta::days(offset * 7);
+                [
+                    format!("{} 09:00:00\tWeek {offset}", date.format("%Y-%m-%d")),
+                    format!("{} 10:00:00\t", date.format("%Y-%m-%d")),
+                ]
+            })
+            .collect()
+    }
+
+    fn workbook_xml(path: &std::path::Path) -> String {
+        let output = Command::new("unzip")
+            .args(["-p", path.to_str().unwrap(), "xl/workbook.xml"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        String::from_utf8(output.stdout).unwrap()
     }
 
     #[test]
@@ -188,6 +224,26 @@ mod tests {
             .all(|sheet| sheet.rows.last().map(|row| row.label.as_str()) == Some("Total")));
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn full_export_activates_current_week_or_newest_available_week() {
+        let cases = current_week_cases();
+
+        for (name, offsets) in [
+            ("with-current", cases.with_current_week),
+            ("without-current", cases.without_current_week),
+        ] {
+            let dir = temp_dir(name);
+            write_log(&dir, &build_week_offset_log(&offsets));
+
+            let path = generate(&dir, TimesheetOptions::full(TimesheetRange::All)).unwrap();
+            let xml = workbook_xml(&path);
+
+            assert_eq!(xml.matches("<sheet ").count(), offsets.len());
+            assert!(xml.contains(&format!("activeTab=\"{}\"", offsets.len() - 1)));
+            let _ = fs::remove_dir_all(dir);
+        }
     }
 
     // Deferred: inject a clock into preview/generate parsing so these tests can freeze "now"

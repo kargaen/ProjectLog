@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import timesheetWeekCases from "../timesheet-current-week.json" with { type: "json" };
 import { installTauriMocks } from "./helpers/tauri";
 
 const MANUAL_PROJECT = "Jot";
@@ -445,4 +446,91 @@ test.describe("Timesheet preview window", () => {
   // Deferred: opening the preview from QuickPanel as a true separate native window should be covered
   // later with a desktop E2E layer. The current browser suite can validate the preview surface and
   // the open command path, but not an actual spawned Tauri window.
+});
+
+test("Tauri mocks bootstrap a configured multi-sheet preview", async ({ page }) => {
+  const sheet = (name: string) => ({
+    name,
+    columns: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    rows: [{
+      label: name,
+      values: [1, 0, 0, 0, 0, 0, 0],
+      total: 1,
+      is_comment: false,
+      is_total: false,
+    }],
+  });
+
+  await installTauriMocks(page, {}, {
+    currentWindowLabel: "timesheet-preview",
+    initialPreviewRequest: { range: "all", format: "full" },
+    previewResponse: {
+      title: "Configured preview",
+      generated_at: "2026-07-21 12:00",
+      generated_at_epoch_ms: Date.UTC(2026, 6, 21, 12),
+      sheets: [sheet("Earlier"), sheet("Current")],
+    },
+  });
+
+  await page.goto("/?window=timesheet-preview");
+
+  await expect(page.getByRole("heading", { name: "Configured preview" })).toBeVisible();
+  await expect(page.locator(".sheet-tabs button")).toHaveText(["Earlier", "Current"]);
+});
+
+test.describe("Full timesheet week selection", () => {
+  function isoWeekName(weekOffset: number) {
+    const date = new Date();
+    date.setDate(date.getDate() + weekOffset * 7);
+    const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    utc.setUTCDate(utc.getUTCDate() + 4 - (utc.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    return `${utc.getUTCFullYear()}-${week}`;
+  }
+
+  function preview(offsets: number[]) {
+    return {
+      title: "Full timesheet",
+      generated_at: "2026-07-21 12:00",
+      generated_at_epoch_ms: Date.now(),
+      sheets: offsets.map((offset) => ({
+        name: isoWeekName(offset),
+        columns: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        rows: [{
+          label: `Week ${offset}`,
+          values: [1, 0, 0, 0, 0, 0, 0],
+          total: 1,
+          is_comment: false,
+          is_total: false,
+        }],
+      })),
+    };
+  }
+
+  async function openPreview(page: Parameters<typeof test>[0]["page"], offsets: number[]) {
+    await installTauriMocks(page, {}, {
+      currentWindowLabel: "timesheet-preview",
+      initialPreviewRequest: { range: "all", format: "full" },
+      previewResponse: preview(offsets),
+    });
+    await page.goto("/?window=timesheet-preview");
+  }
+
+  test("opens on the current week", async ({ page }) => {
+    await openPreview(page, timesheetWeekCases.with_current_week);
+    await expect(page.locator(".sheet-tabs .sort-active")).toHaveText(isoWeekName(0));
+  });
+
+  test("falls back to the newest available week", async ({ page }) => {
+    await openPreview(page, timesheetWeekCases.without_current_week);
+    await expect(page.locator(".sheet-tabs .sort-active")).toHaveText(isoWeekName(-1));
+  });
+
+  test("preserves a selected historical week on refresh", async ({ page }) => {
+    await openPreview(page, timesheetWeekCases.with_current_week);
+    await page.getByRole("button", { name: isoWeekName(-2) }).click();
+    await page.getByRole("button", { name: "Update now" }).click();
+    await expect(page.locator(".sheet-tabs .sort-active")).toHaveText(isoWeekName(-2));
+  });
 });

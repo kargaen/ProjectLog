@@ -122,9 +122,22 @@ export function createTimesheetPreviewController(
     clearCrosshair();
   }
 
+  function currentIsoWeekSheetName() {
+    const now = new Date();
+    const date = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+    const isoYear = date.getUTCFullYear();
+    const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+    const isoWeek = Math.ceil(
+      ((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
+    );
+    return `${isoYear}-${isoWeek}`;
+  }
+
   function updateSheetIndex(
     nextPreview: TimesheetPreview,
-    format: TimesheetFormat
+    format: TimesheetFormat,
+    preservePreview: boolean
   ) {
     const currentSheetName = view.displayedTimesheetSheet?.name;
     if (format !== "full") {
@@ -132,13 +145,18 @@ export function createTimesheetPreviewController(
       return;
     }
 
-    const matchingIndex = nextPreview.sheets.findIndex(
-      (sheet) => sheet.name === currentSheetName
+    const preservedIndex = preservePreview
+      ? nextPreview.sheets.findIndex((sheet) => sheet.name === currentSheetName)
+      : -1;
+    const currentWeekIndex = nextPreview.sheets.findIndex(
+      (sheet) => sheet.name === currentIsoWeekSheetName()
     );
 
     state.timesheetPreviewSheetIndex =
-      matchingIndex >= 0
-        ? matchingIndex
+      preservedIndex >= 0
+        ? preservedIndex
+        : currentWeekIndex >= 0
+          ? currentWeekIndex
         : Math.max(nextPreview.sheets.length - 1, 0);
   }
 
@@ -160,8 +178,8 @@ export function createTimesheetPreviewController(
 
     try {
       const preview = await timesheetBridge.previewTimesheet(range, format);
+      updateSheetIndex(preview, format, preservePreview);
       state.timesheetPreview = preview;
-      updateSheetIndex(preview, format);
       clearCrosshair();
     } catch (error) {
       const message =
