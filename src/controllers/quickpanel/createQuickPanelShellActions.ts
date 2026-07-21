@@ -77,6 +77,23 @@ export function createQuickPanelShellActions(
       return;
     }
 
+    const [outerSize, innerSize] = await Promise.all([
+      currentWindow.outerSize().catch(() => null),
+      currentWindow.innerSize().catch(() => null),
+    ]);
+    const frameWidth = Math.max(
+      (outerSize?.width ?? 0) - (innerSize?.width ?? 0),
+      0
+    );
+    const frameHeight = Math.max(
+      (outerSize?.height ?? 0) - (innerSize?.height ?? 0),
+      0
+    );
+    const innerWidthFor = (outerWidth: number) =>
+      Math.max(outerWidth - frameWidth, minWidth);
+    const innerHeightFor = (outerHeight: number) =>
+      Math.max(outerHeight - frameHeight, minHeight);
+
     const monitors = await availableMonitors().catch(() => []);
     const fallbackMonitor =
       (await primaryMonitor().catch(() => null)) ?? monitors[0] ?? null;
@@ -85,8 +102,8 @@ export function createQuickPanelShellActions(
       await currentWindow
         .setSize(
           new PhysicalSize(
-            Math.max(savedWidth, minWidth),
-            Math.max(savedHeight, minHeight)
+            innerWidthFor(savedWidth),
+            innerHeightFor(savedHeight)
           )
         )
         .catch(() => {});
@@ -129,7 +146,11 @@ export function createQuickPanelShellActions(
       area.position.y + Math.max(area.size.height - height, 0)
     );
 
-    await currentWindow.setSize(new PhysicalSize(width, height)).catch(() => {});
+    await currentWindow
+      .setSize(
+        new PhysicalSize(innerWidthFor(width), innerHeightFor(height))
+      )
+      .catch(() => {});
     await currentWindow
       .setPosition(new PhysicalPosition(x, y))
       .catch(() => {});
