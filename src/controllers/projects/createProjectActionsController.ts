@@ -117,7 +117,7 @@ export function createProjectActionsController(
   }
 
   async function resetTimesheet() {
-    if (!confirm("Reset the timesheet?")) {
+    if (!confirm("Permanently erase all timesheet data?")) {
       return;
     }
 
@@ -128,7 +128,7 @@ export function createProjectActionsController(
   }
 
   async function resetProjects() {
-    if (!confirm("Reset all saved projects?")) {
+    if (!confirm("Permanently erase all saved projects?")) {
       return;
     }
 

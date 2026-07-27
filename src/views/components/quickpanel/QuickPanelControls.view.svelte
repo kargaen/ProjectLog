@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type {
     TimesheetFormat,
     TimesheetRange,
@@ -60,6 +61,37 @@
   function isEnterSubmit(event: KeyboardEvent) {
     return event.key === "Enter" && !event.shiftKey;
   }
+
+  let overflowOpen = $state(false);
+  let overflowTrigger = $state<HTMLButtonElement>();
+  let firstOverflowItem = $state<HTMLButtonElement>();
+
+  async function openOverflow() {
+    overflowOpen = true;
+    await tick();
+    firstOverflowItem?.focus();
+  }
+
+  function closeOverflow({ restoreFocus = false } = {}) {
+    overflowOpen = false;
+    if (restoreFocus) {
+      overflowTrigger?.focus();
+    }
+  }
+
+  function handleOverflowTriggerKeydown(event: KeyboardEvent) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      void openOverflow();
+    }
+  }
+
+  function handleOverflowKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeOverflow({ restoreFocus: true });
+    }
+  }
 </script>
 
 <div class="normal-controls-scroll">
@@ -102,15 +134,51 @@
   </section>
 
   <section class="actions">
-    <button onclick={() => onOpenTimesheetPreview("all")}>
-      Full timesheet
-    </button>
-    <button onclick={() => onOpenTimesheetPreview("today", "recent")}>
+    <button class="primary" onclick={() => onOpenTimesheetPreview("today", "recent")}>
       Yesterday + today
     </button>
+    <button class="primary" onclick={() => onOpenTimesheetPreview("all")}>
+      Full timesheet
+    </button>
     <button onclick={onOpenLogFile}>Open log file</button>
-    <button onclick={onResetTimesheet}>Reset timesheet</button>
-    <button onclick={onResetProjects}>Reset projects</button>
+    <div class="action-overflow">
+      <button
+        bind:this={overflowTrigger}
+        aria-haspopup="menu"
+        aria-expanded={overflowOpen}
+        onclick={() => overflowOpen ? closeOverflow() : void openOverflow()}
+        onkeydown={handleOverflowTriggerKeydown}
+      >⋮ More</button>
+      {#if overflowOpen}
+        <div class="action-overflow-menu" role="menu" tabindex="-1" onkeydown={handleOverflowKeydown}>
+          <button
+            bind:this={firstOverflowItem}
+            role="menuitem"
+            onclick={() => {
+              closeOverflow();
+              onOpenAbout();
+            }}
+          >About</button>
+          <div class="action-overflow-separator" role="separator"></div>
+          <button
+            class="destructive"
+            role="menuitem"
+            onclick={() => {
+              closeOverflow();
+              void onResetTimesheet();
+            }}
+          >Reset timesheet</button>
+          <button
+            class="destructive"
+            role="menuitem"
+            onclick={() => {
+              closeOverflow();
+              void onResetProjects();
+            }}
+          >Reset projects</button>
+        </div>
+      {/if}
+    </div>
   </section>
 
   <section class="panel footer">
@@ -150,9 +218,6 @@
           )}
       />
       <strong>{Math.round(quickPanelOpacity * 100)}%</strong>
-    </div>
-    <div class="feedback">
-      <button onclick={onOpenAbout}>About</button>
     </div>
   </section>
 </div>

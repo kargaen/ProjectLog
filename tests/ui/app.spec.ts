@@ -34,6 +34,83 @@ test.describe("QuickPanel UI", () => {
     await expect(page.getByRole("button", { name: "Hide" })).toBeVisible();
   });
 
+  test("prioritizes timesheet shortcuts and hides secondary actions in overflow", async ({ page }) => {
+    const actions = page.locator(".actions");
+    const primaryActions = actions.locator("button.primary");
+
+    await expect(primaryActions).toHaveText(["Yesterday + today", "Full timesheet"]);
+    await expect(actions.getByRole("button", { name: "About" })).toHaveCount(0);
+    await expect(actions.getByRole("button", { name: "Reset timesheet" })).toHaveCount(0);
+    await expect(actions.getByRole("button", { name: "Reset projects" })).toHaveCount(0);
+  });
+
+  test("supports keyboard access and destructive grouping in the More menu", async ({ page }) => {
+    const more = page.getByRole("button", { name: "⋮ More" });
+
+    await expect(more).toHaveAttribute("aria-haspopup", "menu");
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await more.focus();
+    await more.press("ArrowDown");
+
+    const menu = page.getByRole("menu");
+    await expect(menu).toBeVisible();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    await expect(menu.getByRole("menuitem")).toHaveText([
+      "About",
+      "Reset timesheet",
+      "Reset projects",
+    ]);
+    await expect(menu.getByRole("separator")).toHaveCount(1);
+    await expect(menu.getByRole("menuitem", { name: "About" })).toBeFocused();
+
+    const aboutColor = await menu.getByRole("menuitem", { name: "About" }).evaluate(
+      (element) => getComputedStyle(element).color
+    );
+    const resetActions = menu.locator(".destructive");
+    await expect(resetActions).toHaveCount(2);
+    await expect(resetActions.first()).not.toHaveCSS("color", aboutColor);
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await expect(more).toBeFocused();
+  });
+
+  for (const resetCase of [
+    {
+      action: "Reset timesheet",
+      message: "Permanently erase all timesheet data?",
+      command: "reset_timesheet",
+    },
+    {
+      action: "Reset projects",
+      message: "Permanently erase all saved projects?",
+      command: "reset_projects",
+    },
+  ]) {
+    test(`${resetCase.action} requires explicit confirmation`, async ({ page }) => {
+      page.once("dialog", async (dialog) => {
+        expect(dialog.message()).toBe(resetCase.message);
+        await dialog.dismiss();
+      });
+      await page.getByRole("button", { name: "⋮ More" }).click();
+      await page.getByRole("menuitem", { name: resetCase.action }).click();
+      await expect.poll(async () => (await mockInvokedCommands(page)).filter(
+        (command) => command === resetCase.command
+      )).toHaveLength(0);
+
+      page.once("dialog", async (dialog) => {
+        expect(dialog.message()).toBe(resetCase.message);
+        await dialog.accept();
+      });
+      await page.getByRole("button", { name: "⋮ More" }).click();
+      await page.getByRole("menuitem", { name: resetCase.action }).click();
+      await expect.poll(async () => (await mockInvokedCommands(page)).filter(
+        (command) => command === resetCase.command
+      )).toHaveLength(1);
+    });
+  }
+
   test("manual mode supports select-select-deselect workflow", async ({ page }) => {
     await page.getByRole("button", { name: MANUAL_PROJECT }).click();
     await stepPause(page);
@@ -128,7 +205,8 @@ test.describe("QuickPanel UI", () => {
     await stepPause(page);
     await expect(page.getByRole("button", { name: "Recent" })).toBeVisible();
 
-    await page.getByRole("button", { name: "About" }).click();
+    await page.getByRole("button", { name: "⋮ More" }).click();
+    await page.getByRole("menuitem", { name: "About" }).click();
     await stepPause(page);
     await expect(page.getByRole("heading", { name: "About ProjectLog" })).toBeVisible();
     await page.getByRole("button", { name: "Close", exact: true }).click();
