@@ -16,6 +16,14 @@ function mockInvokedCommands(page: Parameters<typeof test>[0]["page"]) {
   });
 }
 
+function mockInvokedCalls(page: Parameters<typeof test>[0]["page"]) {
+  return page.evaluate(() => {
+    return ((window as Window & {
+      __TAURI_MOCK__?: { invokedCalls?: Array<{ command: string; args: Record<string, unknown> }> };
+    }).__TAURI_MOCK__?.invokedCalls ?? []);
+  });
+}
+
 async function stepPause(page: Parameters<typeof test>[0]["page"]) {
   if (DEBUG_STEP_DELAY_MS > 0) {
     await page.waitForTimeout(DEBUG_STEP_DELAY_MS);
@@ -89,22 +97,36 @@ test.describe("QuickPanel UI", () => {
     },
   ]) {
     test(`${resetCase.action} requires explicit confirmation`, async ({ page }) => {
-      page.once("dialog", async (dialog) => {
-        expect(dialog.message()).toBe(resetCase.message);
-        await dialog.dismiss();
+      // EPIC-011 §1 Flows 3–4 require a surfaced decision before either reset executes.
+      await page.evaluate(() => {
+        ((window as Window & { __TAURI_MOCK__?: { dialogResponses?: string[] } }).__TAURI_MOCK__
+          ?.dialogResponses ?? []).push("Cancel");
       });
       await page.getByRole("button", { name: "⋮ More" }).click();
       await page.getByRole("menuitem", { name: resetCase.action }).click();
       await expect.poll(async () => (await mockInvokedCommands(page)).filter(
+        (command) => command === "plugin:dialog|message"
+      )).toHaveLength(1);
+      await expect.poll(async () => (await mockInvokedCalls(page)).find(
+        ({ command }) => command === "plugin:dialog|message"
+      )?.args).toMatchObject({
+        message: resetCase.message,
+        kind: "warning",
+        buttons: { OkCancelCustom: ["Reset", "Cancel"] },
+      });
+      await expect.poll(async () => (await mockInvokedCommands(page)).filter(
         (command) => command === resetCase.command
       )).toHaveLength(0);
 
-      page.once("dialog", async (dialog) => {
-        expect(dialog.message()).toBe(resetCase.message);
-        await dialog.accept();
+      await page.evaluate(() => {
+        ((window as Window & { __TAURI_MOCK__?: { dialogResponses?: string[] } }).__TAURI_MOCK__
+          ?.dialogResponses ?? []).push("Reset");
       });
       await page.getByRole("button", { name: "⋮ More" }).click();
       await page.getByRole("menuitem", { name: resetCase.action }).click();
+      await expect.poll(async () => (await mockInvokedCommands(page)).filter(
+        (command) => command === "plugin:dialog|message"
+      )).toHaveLength(2);
       await expect.poll(async () => (await mockInvokedCommands(page)).filter(
         (command) => command === resetCase.command
       )).toHaveLength(1);
