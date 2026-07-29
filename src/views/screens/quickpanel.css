@@ -395,6 +395,10 @@ body {
   color: #fff;
 }
 
+.quickpanel-screen .primary:hover:not(:disabled) {
+  background: #216b56;
+}
+
 .quickpanel-screen .small {
   padding: 4px 7px;
 }

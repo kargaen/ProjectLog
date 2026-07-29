@@ -52,6 +52,19 @@ test.describe("QuickPanel UI", () => {
     await expect(actions.getByRole("button", { name: "Reset projects" })).toHaveCount(0);
   });
 
+  test("keeps positive action text readable on hover", async ({ page }) => {
+    const positiveActions = page.locator(".actions button.primary");
+
+    await expect(positiveActions).toHaveCount(2);
+    await expect(positiveActions.first()).toHaveCSS("background-color", "rgb(38, 122, 98)");
+    await expect(positiveActions.first()).toHaveCSS("color", "rgb(255, 255, 255)");
+
+    await positiveActions.first().hover();
+
+    await expect(positiveActions.first()).toHaveCSS("background-color", "rgb(33, 107, 86)");
+    await expect(positiveActions.first()).toHaveCSS("color", "rgb(255, 255, 255)");
+  });
+
   test("supports keyboard access and destructive grouping in the More menu", async ({ page }) => {
     const more = page.getByRole("button", { name: "⋮ More" });
 
