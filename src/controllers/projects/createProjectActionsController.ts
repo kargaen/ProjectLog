@@ -1,3 +1,4 @@
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { createLogger } from "../../lib/logger";
 import type {
   TimesheetFormat,
@@ -117,7 +118,12 @@ export function createProjectActionsController(
   }
 
   async function resetTimesheet() {
-    if (!confirm("Permanently erase all timesheet data?")) {
+    if (!await confirm("Permanently erase all timesheet data?", {
+      title: "Reset timesheet",
+      kind: "warning",
+      okLabel: "Reset",
+      cancelLabel: "Cancel",
+    })) {
       return;
     }
 
@@ -128,7 +134,12 @@ export function createProjectActionsController(
   }
 
   async function resetProjects() {
-    if (!confirm("Permanently erase all saved projects?")) {
+    if (!await confirm("Permanently erase all saved projects?", {
+      title: "Reset projects",
+      kind: "warning",
+      okLabel: "Reset",
+      cancelLabel: "Cancel",
+    })) {
       return;
     }
 
