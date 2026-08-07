@@ -6,27 +6,90 @@ export type TimesheetDisplayRow = TimesheetPreviewRow & {
 
 const ZERO_EPSILON = 0.000001;
 
+const HOUR_STEP = 0.5;
+// Lower bound rounds every cell down to zero, upper bound doubles every cell: any
+// reachable target sum lies between the two. Midpoint of the first bisection is
+// exactly 1, so an already-consistent sheet costs a single iteration.
+const SCALE_LOWER_BOUND = 0;
+const SCALE_UPPER_BOUND = 2;
+const SCALE_BISECT_ITERATIONS = 40;
+const SUM_EPSILON = 0.000001;
+// Cells holding the same hours would otherwise cross the half-hour boundary at the
+// same scale, moving the sum by a whole group at a time and stepping over the
+// target. Weighting each cell by its position separates those crossings, so the
+// sum climbs half an hour at a time and the bisect can land on the target. The
+// weight is far too small to move a cell across a boundary on its own.
+const TIE_BREAK_WEIGHT = 0.000000001;
+
 function isZeroHours(value: number) {
   return Math.abs(value) < ZERO_EPSILON;
 }
 
-export function roundHalfPreservingSum(values: number[]) {
-  const step = 0.5;
-  const floors = values.map((value) => Math.floor(value / step) * step);
-  const roundedTotal = Math.round(values.reduce((sum, value) => sum + value, 0) / step) * step;
-  const currentTotal = floors.reduce((sum, value) => sum + value, 0);
-  let increments = Math.round((roundedTotal - currentTotal) / step);
-  const ranked = values
-    .map((value, index) => ({ index, remainder: value - floors[index] }))
-    .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
-  const result = [...floors];
+export function roundToHourStep(value: number) {
+  return Math.round(value / HOUR_STEP) * HOUR_STEP;
+}
 
-  for (let i = 0; i < ranked.length && increments > 0; i += 1) {
-    result[ranked[i].index] += step;
-    increments -= 1;
+function roundCell(value: number, scale: number, cellIndex: number) {
+  return roundToHourStep(value * scale * (1 + cellIndex * TIE_BREAK_WEIGHT));
+}
+
+function scaledRoundedSum(values: number[], scale: number) {
+  return values.reduce(
+    (sum, value, index) => sum + roundCell(value, scale, index),
+    0
+  );
+}
+
+/**
+ * Bisects a scale factor until the cells, scaled and then rounded to whole half
+ * hours, add up to `target`. The sum is non-decreasing in the scale, so halving
+ * the bracket each step converges on it. A target no scale can reach falls back
+ * to the scale that came closest.
+ */
+export function findRoundingScale(values: number[], target: number) {
+  let low = SCALE_LOWER_BOUND;
+  let high = SCALE_UPPER_BOUND;
+  let bestScale = SCALE_UPPER_BOUND;
+  let bestDistance = Infinity;
+
+  for (let i = 0; i < SCALE_BISECT_ITERATIONS; i += 1) {
+    const scale = (low + high) / 2;
+    const sum = scaledRoundedSum(values, scale);
+    const distance = Math.abs(sum - target);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestScale = scale;
+    }
+
+    if (distance < SUM_EPSILON) {
+      return scale;
+    }
+
+    if (sum < target) {
+      low = scale;
+    } else {
+      high = scale;
+    }
   }
 
-  return result;
+  return bestScale;
+}
+
+/**
+ * One scale factor per sheet, chosen so the sheet's rounded cells add up to the
+ * sheet's rounded total. Comment rows break a project's own hours down further,
+ * so they stay out of the target — counting them would double the sheet.
+ */
+function sheetRoundingScale(sheet: TimesheetPreviewSheet) {
+  const countedValues = sheet.rows
+    .filter((row) => !row.is_comment && !row.is_total)
+    .flatMap((row) => row.values);
+  const targetTotal = roundToHourStep(
+    countedValues.reduce((sum, value) => sum + value, 0)
+  );
+
+  return findRoundingScale(countedValues, targetTotal);
 }
 
 export function buildTimesheetDisplayRows(
@@ -35,7 +98,12 @@ export function buildTimesheetDisplayRows(
 ) {
   if (!sheet) return [];
 
+  const scale = roundingEnabled ? sheetRoundingScale(sheet) : 1;
+
   let currentBand = -1;
+  // Counts the cells the scale was fitted against, in the order it saw them, so
+  // each one keeps the tie-break weight the bisect assigned it.
+  let countedCellIndex = 0;
   const rows: TimesheetDisplayRow[] = sheet.rows.map((row) => {
     if (!row.is_comment && !row.is_total) {
       currentBand += 1;
@@ -49,7 +117,11 @@ export function buildTimesheetDisplayRows(
       };
     }
 
-    const roundedValues = roundHalfPreservingSum(row.values);
+    const roundedValues = row.values.map((value) =>
+      row.is_comment
+        ? roundToHourStep(value * scale)
+        : roundCell(value, scale, countedCellIndex++)
+    );
     return {
       ...row,
       values: roundedValues,

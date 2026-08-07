@@ -190,6 +190,109 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    fn counted_cells(sheet: &TimesheetPreviewSheet) -> Vec<f64> {
+        sheet
+            .rows
+            .iter()
+            .filter(|row| !row.is_comment && !row.is_total)
+            .flat_map(|row| row.values.iter().copied())
+            .collect()
+    }
+
+    #[test]
+    fn rounded_cells_add_up_to_the_rounded_total() {
+        let dir = temp_dir("timesheet-rounding-total");
+        // Every project lands on 1.2h, so rounding each row on its own gives 1.0 each
+        // and loses the half hour the raw total (4.8h -> 5.0h) is owed.
+        fs::write(
+            dir.join("log.dat"),
+            "2026-04-20 09:00:00\tAlpha\tPlanning\n\
+             2026-04-20 10:12:00\tBeta\tBuild\n\
+             2026-04-20 11:24:00\tGamma\n\
+             2026-04-20 12:36:00\tDelta\n\
+             2026-04-20 13:48:00\t\n",
+        )
+        .unwrap();
+
+        let raw = preview(&dir, TimesheetOptions::full(TimesheetRange::All)).unwrap();
+        let rounded = preview(
+            &dir,
+            TimesheetOptions {
+                rounding_enabled: true,
+                ..TimesheetOptions::full(TimesheetRange::All)
+            },
+        )
+        .unwrap();
+
+        for (raw_sheet, rounded_sheet) in raw.sheets.iter().zip(rounded.sheets.iter()) {
+            let raw_total: f64 = counted_cells(raw_sheet).iter().sum();
+            let target = (raw_total / 0.5).round() * 0.5;
+            let total_row = rounded_sheet.rows.last().unwrap();
+            let rounded_cells: f64 = counted_cells(rounded_sheet).iter().sum();
+
+            assert!(raw_total > 0.0);
+            assert!(
+                (total_row.total - target).abs() < 1e-6,
+                "total row {} should be the rounded raw total {}",
+                total_row.total,
+                target
+            );
+            assert!(
+                (rounded_cells - total_row.total).abs() < 1e-6,
+                "cells add up to {} but the total row says {}",
+                rounded_cells,
+                total_row.total
+            );
+
+            for row in &rounded_sheet.rows {
+                for &value in &row.values {
+                    assert!(
+                        (value / 0.5 - (value / 0.5).round()).abs() < 1e-6,
+                        "{} is not a whole half hour",
+                        value
+                    );
+                }
+                let row_sum: f64 = row.values.iter().sum();
+                assert!((row.total - row_sum).abs() < 1e-6);
+            }
+        }
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn rounding_leaves_empty_days_and_whole_hours_alone() {
+        let dir = temp_dir("timesheet-rounding-whole");
+        fs::write(
+            dir.join("log.dat"),
+            "2026-04-20 09:00:00\tAlpha\tPlanning\n\
+             2026-04-20 11:00:00\tBeta\tBuild\n\
+             2026-04-20 14:00:00\t\n",
+        )
+        .unwrap();
+
+        let rounded = preview(
+            &dir,
+            TimesheetOptions {
+                rounding_enabled: true,
+                ..TimesheetOptions::full(TimesheetRange::All)
+            },
+        )
+        .unwrap();
+
+        let sheet = &rounded.sheets[0];
+        assert_eq!(sheet.rows[0].total, 2.0);
+        assert_eq!(sheet.rows.last().unwrap().total, 5.0);
+        // Monday holds every hour; the rest of the week must stay empty.
+        for row in &sheet.rows {
+            for &value in row.values.iter().skip(1) {
+                assert_eq!(value, 0.0);
+            }
+        }
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // Deferred: inject a clock into preview/generate parsing so these tests can freeze "now"
     // instead of building relative fixtures from Local::now(). The current relative approach is
     // practical and valuable, but a clock abstraction would make week and recent boundaries fully deterministic.
