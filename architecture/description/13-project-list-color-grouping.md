@@ -20,9 +20,11 @@ Command wrappers live in `src-tauri/src/commands/settings_commands.rs`; the logi
 `src/lib/groupedView.ts` exports `buildGroupedView`, the shared two-level project-list view model. Level one mixes named group boxes and ungrouped project rows. A-Z mode sorts group names and ungrouped project names together, with members sorted A-Z inside each group. Recent mode sorts each group by its most recent member timestamp (`T_group = max(member timestamps)`) and sorts members by recency. Manual mode keeps the existing manual order and uses the first member position as the group position.
 
 - An assigned color renders as a vertical left-edge accent bar (`.project-color-accent`) before the row text. Project rows no longer use a background fill or bottom underline for color.
-- When grouping is enabled, `projectListEntries` in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` maps `buildGroupedView` output into collapsible group entries. Collapse state is ephemeral frontend state only and is not persisted.
-- `src/views/components/projects/ProjectListPanel.view.svelte` renders each non-empty group as a bordered `.project-group-box` with a chevron/header and indented `.group-member` project rows. Ungrouped projects render as normal top-level rows with no group box and no "Ungrouped" heading.
-- The sort-row grouping control is a checkbox. It is hidden when no project has a group, and Manual sort mode forces grouping on and disables the checkbox because drag reordering is constrained to the current group span.
+- Adding or quick-tracking a project records an initial `project_recent_usage` timestamp, so Recent ordering has a value before the project is selected later.
+- When grouping is enabled, `groupedProjects` in `src/controllers/quickpanel/createQuickPanelController.svelte.ts` maps `buildGroupedView` output into collapsible group entries. Collapse state is ephemeral frontend state only and is not persisted.
+- `src/views/components/projects/ProjectListPanel.view.svelte` renders each non-empty group as a bordered `.project-group-box` with a chevron/header and indented `.group-member` project rows. Ungrouped projects render as normal top-level rows with no group box and no "Ungrouped" heading. Empty groups do not render boxes.
+- The controller keeps group names seen in the current QuickPanel session available in the context-menu picker even after the last member is ungrouped, so an empty group can be reused without recreating it.
+- The sort-row grouping control is a checkbox. It is hidden when no group name is known, and Manual sort mode forces grouping on and disables the checkbox because drag reordering is constrained to the current group span.
 
 ### Tray menu grouping
 

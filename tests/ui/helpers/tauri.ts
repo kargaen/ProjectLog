@@ -147,12 +147,17 @@ export async function installTauriMocks(
     ],
   };
 
-  await page.addInitScript((
-    state: MockProjectState,
-    currentWindowLabel: string,
-    initialPreviewRequest: MockPreviewRequest | null,
-    initialPreviewResponse: MockPreview
-  ) => {
+  await page.addInitScript(({
+    state,
+    currentWindowLabel,
+    initialPreviewRequest,
+    initialPreviewResponse,
+  }: {
+    state: MockProjectState;
+    currentWindowLabel: string;
+    initialPreviewRequest: MockPreviewRequest | null;
+    initialPreviewResponse: MockPreview;
+  }) => {
     const params = new URLSearchParams(window.location.search);
     const queryWindowLabel = params.get("mockWindowLabel");
     const queryPreviewRange = params.get("mockPreviewRange") as MockPreviewRequest["range"] | null;
@@ -266,6 +271,8 @@ export async function installTauriMocks(
       const callbacks = new Map<number, (payload: unknown) => void>();
       const eventHandlers = new Map<string, number[]>();
       const invokedCommands: string[] = [];
+      const invokedCalls: Array<{ command: string; args: Record<string, unknown> }> = [];
+      const dialogResponses: string[] = [];
       let callbackId = 1;
       let eventId = 1;
       let previewRequest = nextPreviewRequest;
@@ -322,6 +329,7 @@ export async function installTauriMocks(
         callbacks,
         invoke: async (cmd: string, args: Record<string, unknown> = {}) => {
           invokedCommands.push(cmd);
+          invokedCalls.push({ command: cmd, args });
           switch (cmd) {
           case "get_state":
             return JSON.parse(JSON.stringify(clonedState));
@@ -435,6 +443,8 @@ export async function installTauriMocks(
             return null;
           case "plugin:updater|check":
             return null;
+          case "plugin:dialog|message":
+            return dialogResponses.shift() ?? "Cancel";
           case "plugin:event|listen": {
             const event = String(args.event ?? "");
             const handler = Number(args.handler);
@@ -499,14 +509,17 @@ export async function installTauriMocks(
         __TAURI_MOCK__?: Record<string, unknown>;
       }).__TAURI_MOCK__ = {
         invokedCommands,
+        invokedCalls,
+        dialogResponses,
         setupMocks,
       };
     };
 
     setupMocks(state, currentWindowLabel, initialPreviewRequest, initialPreviewResponse);
-  },
-  mergedState,
-  options?.currentWindowLabel ?? "main",
-  options?.initialPreviewRequest ?? null,
-  previewResponse);
+  }, {
+    state: mergedState,
+    currentWindowLabel: options?.currentWindowLabel ?? "main",
+    initialPreviewRequest: options?.initialPreviewRequest ?? null,
+    initialPreviewResponse: previewResponse,
+  });
 }

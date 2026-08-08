@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use chrono::Local;
+use chrono::{Datelike, Local};
 use rust_xlsxwriter::{Format, FormatAlign, Workbook, Worksheet};
 
 use crate::{log, log_debug, log_warn};
@@ -48,6 +48,7 @@ fn write_sheet(
     sheet: &crate::models::dto::timesheet_dto::TimesheetPreviewSheet,
     title: &str,
     first_column_width: f64,
+    active: bool,
 ) -> Result<(), String> {
     let right_fmt = Format::new().set_align(FormatAlign::Right);
     let decimal_right_fmt = Format::new()
@@ -57,6 +58,9 @@ fn write_sheet(
 
     let worksheet = workbook.add_worksheet();
     worksheet.set_name(&sheet.name).map_err(|e| e.to_string())?;
+    if active {
+        worksheet.set_active(true);
+    }
     worksheet
         .set_column_width(0, first_column_width)
         .map_err(|e| e.to_string())?;
@@ -113,8 +117,15 @@ pub fn generate(data_dir: &Path, options: TimesheetOptions) -> Result<PathBuf, S
     log!("generate timesheet started");
     let preview = timesheet_service::preview(data_dir, options)?;
     let mut workbook = Workbook::new();
+    let current_week = Local::now().iso_week();
+    let current_week_name = format!("{}-{}", current_week.year(), current_week.week());
+    let active_sheet_index = preview
+        .sheets
+        .iter()
+        .position(|sheet| sheet.name == current_week_name)
+        .unwrap_or_else(|| preview.sheets.len().saturating_sub(1));
 
-    for sheet in &preview.sheets {
+    for (index, sheet) in preview.sheets.iter().enumerate() {
         log_debug!("writing worksheet {}", sheet.name);
         let title = if options.format == TimesheetFormat::Recent {
             "Yesterday + Today"
@@ -126,7 +137,13 @@ pub fn generate(data_dir: &Path, options: TimesheetOptions) -> Result<PathBuf, S
         } else {
             42.0
         };
-        write_sheet(&mut workbook, sheet, title, first_column_width)?;
+        write_sheet(
+            &mut workbook,
+            sheet,
+            title,
+            first_column_width,
+            index == active_sheet_index,
+        )?;
     }
 
     let output_filename = match options.format {

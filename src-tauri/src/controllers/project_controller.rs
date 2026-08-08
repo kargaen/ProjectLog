@@ -201,3 +201,39 @@ pub fn reset_projects(state: &AppState, app: &AppHandle) {
     tray::rebuild_menu(app);
     emit_state_changed(app);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{add_project_value, quick_project_value};
+    use crate::{models::domain::settings::UiSettings, AppState};
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("projectlog-{name}-{stamp}"));
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn add_project_records_creation_recency_timestamp() {
+        let state = AppState::new(temp_dir("add-project-recent"), Vec::new(), UiSettings::default());
+
+        add_project_value(&state, "Alpha");
+
+        let settings = state.settings.lock().unwrap();
+        assert!(settings.project_recent_usage.get("Alpha").copied().unwrap_or(0) > 0);
+    }
+
+    #[test]
+    fn quick_project_records_creation_recency_timestamp() {
+        let state = AppState::new(temp_dir("quick-project-recent"), Vec::new(), UiSettings::default());
+
+        quick_project_value(&state, "Adhoc");
+
+        let settings = state.settings.lock().unwrap();
+        assert!(settings.project_recent_usage.get("Adhoc").copied().unwrap_or(0) > 0);
+    }
+}

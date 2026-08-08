@@ -112,6 +112,7 @@ export function createQuickPanelController(
   let fontScaleIndicatorTimer: ReturnType<typeof setTimeout> | undefined;
   let projectColors = $state<Record<string, string>>({});
   let projectGroups = $state<Record<string, string>>({});
+  let knownGroupNames = $state<Set<string>>(new Set());
   let groupProjectsEnabled = $state(false);
   let collapsedGroups = $state<Set<string>>(new Set());
   let currentWindowHeight = $state(Infinity);
@@ -141,6 +142,10 @@ export function createQuickPanelController(
     getProjectGroups: () => projectGroups,
     setProjectGroups: (value) => {
       projectGroups = value;
+      knownGroupNames = new Set([
+        ...knownGroupNames,
+        ...Object.values(value),
+      ]);
     },
     getGroupProjectsEnabled: () => groupProjectsEnabled,
     setGroupProjectsEnabled: (value) => {
@@ -222,12 +227,9 @@ export function createQuickPanelController(
       return collapsedGroups;
     },
     get knownGroupNames() {
-      const groups = stateSync.getProjectGroups();
-      return [...new Set(Object.values(groups))].sort((a, b) =>
-        a.localeCompare(b)
-      );
+      return [...knownGroupNames].sort((a, b) => a.localeCompare(b));
     },
-    get projectListEntries() {
+    get groupedProjects() {
       const ordered = this.allProjects;
       if (!this.groupProjectsEnabled) {
         return ordered.map((name) => ({ kind: "project" as const, name }));

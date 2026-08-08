@@ -1,3 +1,4 @@
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { createLogger } from "../../lib/logger";
 import type {
   TimesheetFormat,
@@ -117,7 +118,12 @@ export function createProjectActionsController(
   }
 
   async function resetTimesheet() {
-    if (!confirm("Reset the timesheet?")) {
+    if (!await confirm("Permanently erase all timesheet data?", {
+      title: "Reset timesheet",
+      kind: "warning",
+      okLabel: "Reset",
+      cancelLabel: "Cancel",
+    })) {
       return;
     }
 
@@ -128,7 +134,12 @@ export function createProjectActionsController(
   }
 
   async function resetProjects() {
-    if (!confirm("Reset all saved projects?")) {
+    if (!await confirm("Permanently erase all saved projects?", {
+      title: "Reset projects",
+      kind: "warning",
+      okLabel: "Reset",
+      cancelLabel: "Cancel",
+    })) {
       return;
     }
 
@@ -198,8 +209,13 @@ export function createProjectActionsController(
     }
 
     const order = [...getManualOrder()];
-    const from = order.indexOf(droppedProject);
-    const targetIndex = order.indexOf(project);
+    const group = groups[droppedProject] ?? null;
+    const siblingPositions = order.flatMap((candidate, index) =>
+      (groups[candidate] ?? null) === group ? [index] : []
+    );
+    const siblings = siblingPositions.map((index) => order[index]);
+    const from = siblings.indexOf(droppedProject);
+    const targetIndex = siblings.indexOf(project);
     let to = targetIndex;
 
     if (from === -1 || to === -1) {
@@ -213,12 +229,15 @@ export function createProjectActionsController(
       to += 1;
     }
 
-    order.splice(from, 1);
+    siblings.splice(from, 1);
     if (from < to) {
       to -= 1;
     }
 
-    order.splice(to, 0, droppedProject);
+    siblings.splice(to, 0, droppedProject);
+    siblingPositions.forEach((position, index) => {
+      order[position] = siblings[index];
+    });
     setManualOrder(order);
     queueSettingsSave();
     state.draggedProject = null;

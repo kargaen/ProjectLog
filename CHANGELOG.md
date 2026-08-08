@@ -1,5 +1,9 @@
 ## Unreleased
 
+- Fixed QuickPanel reset confirmations not appearing in packaged release candidates before destructive actions ran.
+- QuickPanel now prioritizes Yesterday + Today and Full Timesheet, while About and confirmed destructive resets live in an accessible More menu. (EPIC-011)
+- Full timesheet previews and Excel exports now open on the current week, falling back to the newest recorded week when needed. (EPIC-010)
+- Project list colors now render as left-edge accents, groups render as collapsible boxes, manual drag stays within a project's current group, and empty group names remain reusable from the context menu. (EPIC-008)
 - Architecture rewrite: domain-based folder structure, split bridge services, MVC layer separation
 - Rounding is now applied on export (Excel), not just on the preview display
 - Rounded hours now add up to the rounded total, in the preview and in the Excel export

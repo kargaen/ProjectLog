@@ -4,7 +4,9 @@ use std::path::Path;
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, TimeDelta};
 
 use crate::models::domain::timesheet::{TimesheetFormat, TimesheetOptions, TimesheetRange};
-use crate::models::dto::timesheet_dto::{TimesheetPreview, TimesheetPreviewRow, TimesheetPreviewSheet};
+use crate::models::dto::timesheet_dto::{
+    TimesheetPreview, TimesheetPreviewRow, TimesheetPreviewSheet,
+};
 
 const DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 const PREVIEW_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M";
@@ -392,7 +394,11 @@ fn apply_rounding_to_preview(mut preview: TimesheetPreview) -> TimesheetPreview 
             row.values = rounded;
         }
 
-        let value_count = sheet.rows.iter().find(|r| r.is_total).map_or(0, |r| r.values.len());
+        let value_count = sheet
+            .rows
+            .iter()
+            .find(|r| r.is_total)
+            .map_or(0, |r| r.values.len());
         let mut column_totals = vec![0.0_f64; value_count];
         for row in sheet.rows.iter() {
             if row.is_total || row.is_comment {
@@ -417,5 +423,85 @@ pub fn preview(data_dir: &Path, options: TimesheetOptions) -> Result<TimesheetPr
         Ok(apply_rounding_to_preview(preview))
     } else {
         Ok(preview)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn preview_with_project_values(values: Vec<Vec<f64>>) -> TimesheetPreview {
+        let value_count = values.first().map_or(0, Vec::len);
+        let mut rows: Vec<TimesheetPreviewRow> = values
+            .into_iter()
+            .enumerate()
+            .map(|(index, values)| TimesheetPreviewRow {
+                label: format!("Project {index}"),
+                total: values.iter().sum(),
+                values,
+                is_comment: false,
+                is_total: false,
+            })
+            .collect();
+        rows.push(TimesheetPreviewRow {
+            label: "Total".to_string(),
+            values: vec![0.0; value_count],
+            total: 0.0,
+            is_comment: false,
+            is_total: true,
+        });
+
+        TimesheetPreview {
+            title: "Test".to_string(),
+            generated_at: String::new(),
+            generated_at_epoch_ms: 0,
+            sheets: vec![TimesheetPreviewSheet {
+                name: "Test".to_string(),
+                columns: (0..value_count).map(|index| index.to_string()).collect(),
+                rows,
+            }],
+        }
+    }
+
+    /// Authority: the Timesheet Domain requires per-project daily totals and deliberate
+    /// anti-inflation rounding, so displayed daily entries must add up to the rounded daily total.
+    #[test]
+    fn rounding_preserves_the_rounded_total_for_each_day() {
+        let preview = preview_with_project_values(vec![
+            vec![3.52, 0.08],
+            vec![0.47, 0.0],
+            vec![0.10, 0.0],
+            vec![0.77, 0.0],
+            vec![0.0, 0.71],
+            vec![3.20, 0.0],
+            vec![0.0, 6.69],
+            vec![0.0, 0.52],
+        ]);
+
+        let rounded = apply_rounding_to_preview(preview);
+        let total = rounded.sheets[0].rows.last().unwrap();
+
+        assert_eq!(total.values, vec![8.0, 8.0]);
+        assert_eq!(total.total, 16.0);
+    }
+
+    /// Authority: the Timesheet Domain's anti-inflation rule rounds the aggregate once instead
+    /// of allowing repeated per-entry rounding losses to lower the reported daily total.
+    #[test]
+    fn rounding_distributes_half_hours_without_losing_the_daily_sum() {
+        let preview = preview_with_project_values(vec![
+            vec![7.24],
+            vec![7.23],
+            vec![7.22],
+            vec![7.21],
+            vec![7.20],
+        ]);
+
+        let rounded = apply_rounding_to_preview(preview);
+        let rows = &rounded.sheets[0].rows;
+        let values: Vec<f64> = rows[..5].iter().map(|row| row.values[0]).collect();
+
+        assert_eq!(values, vec![7.5, 7.5, 7.0, 7.0, 7.0]);
+        assert_eq!(rows.last().unwrap().total, 36.0);
     }
 }

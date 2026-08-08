@@ -1,8 +1,13 @@
 # EPIC-003: Timesheet range correctness
 
-**Status:** draft
+**Status:** superseded
 **Created:** 2026-07-12
 **Architecture baseline:** 299b448
+
+> **Superseded (2026-07-21, never implemented).** The Yesterday + Today behavior already has
+> regression coverage, while the remaining current-week behavior is a smaller preview-and-export
+> selection change rather than a range-correctness change. See EPIC-010. Kept for the record, not
+> for implementation.
 
 Source: migrated from `DEVNOTES.md` (deleted in the same commit). Original text quoted per flow.
 

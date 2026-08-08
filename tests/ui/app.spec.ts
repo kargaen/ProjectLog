@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import timesheetWeekCases from "../timesheet-current-week.json" with { type: "json" };
 import { installTauriMocks } from "./helpers/tauri";
 
 const MANUAL_PROJECT = "Jot";
@@ -12,6 +13,14 @@ function mockInvokedCommands(page: Parameters<typeof test>[0]["page"]) {
   return page.evaluate(() => {
     return ((window as Window & { __TAURI_MOCK__?: { invokedCommands?: string[] } }).__TAURI_MOCK__
       ?.invokedCommands ?? []) as string[];
+  });
+}
+
+function mockInvokedCalls(page: Parameters<typeof test>[0]["page"]) {
+  return page.evaluate(() => {
+    return ((window as Window & {
+      __TAURI_MOCK__?: { invokedCalls?: Array<{ command: string; args: Record<string, unknown> }> };
+    }).__TAURI_MOCK__?.invokedCalls ?? []);
   });
 }
 
@@ -32,6 +41,110 @@ test.describe("QuickPanel UI", () => {
     await expect(page.getByRole("heading", { name: "ProjectLog QuickPanel" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Hide" })).toBeVisible();
   });
+
+  test("prioritizes timesheet shortcuts and hides secondary actions in overflow", async ({ page }) => {
+    const actions = page.locator(".actions");
+    const primaryActions = actions.locator("button.primary");
+
+    await expect(primaryActions).toHaveText(["Yesterday + today", "Full timesheet"]);
+    await expect(actions.getByRole("button", { name: "About" })).toHaveCount(0);
+    await expect(actions.getByRole("button", { name: "Reset timesheet" })).toHaveCount(0);
+    await expect(actions.getByRole("button", { name: "Reset projects" })).toHaveCount(0);
+  });
+
+  test("keeps positive action text readable on hover", async ({ page }) => {
+    const positiveActions = page.locator(".actions button.primary");
+
+    await expect(positiveActions).toHaveCount(2);
+    await expect(positiveActions.first()).toHaveCSS("background-color", "rgb(38, 122, 98)");
+    await expect(positiveActions.first()).toHaveCSS("color", "rgb(255, 255, 255)");
+
+    await positiveActions.first().hover();
+
+    await expect(positiveActions.first()).toHaveCSS("background-color", "rgb(33, 107, 86)");
+    await expect(positiveActions.first()).toHaveCSS("color", "rgb(255, 255, 255)");
+  });
+
+  test("supports keyboard access and destructive grouping in the More menu", async ({ page }) => {
+    const more = page.getByRole("button", { name: "⋮ More" });
+
+    await expect(more).toHaveAttribute("aria-haspopup", "menu");
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await more.focus();
+    await more.press("ArrowDown");
+
+    const menu = page.getByRole("menu");
+    await expect(menu).toBeVisible();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    await expect(menu.getByRole("menuitem")).toHaveText([
+      "About",
+      "Reset timesheet",
+      "Reset projects",
+    ]);
+    await expect(menu.getByRole("separator")).toHaveCount(1);
+    await expect(menu.getByRole("menuitem", { name: "About" })).toBeFocused();
+
+    const aboutColor = await menu.getByRole("menuitem", { name: "About" }).evaluate(
+      (element) => getComputedStyle(element).color
+    );
+    const resetActions = menu.locator(".destructive");
+    await expect(resetActions).toHaveCount(2);
+    await expect(resetActions.first()).not.toHaveCSS("color", aboutColor);
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await expect(more).toBeFocused();
+  });
+
+  for (const resetCase of [
+    {
+      action: "Reset timesheet",
+      message: "Permanently erase all timesheet data?",
+      command: "reset_timesheet",
+    },
+    {
+      action: "Reset projects",
+      message: "Permanently erase all saved projects?",
+      command: "reset_projects",
+    },
+  ]) {
+    test(`${resetCase.action} requires explicit confirmation`, async ({ page }) => {
+      // EPIC-011 §1 Flows 3–4 require a surfaced decision before either reset executes.
+      await page.evaluate(() => {
+        ((window as Window & { __TAURI_MOCK__?: { dialogResponses?: string[] } }).__TAURI_MOCK__
+          ?.dialogResponses ?? []).push("Cancel");
+      });
+      await page.getByRole("button", { name: "⋮ More" }).click();
+      await page.getByRole("menuitem", { name: resetCase.action }).click();
+      await expect.poll(async () => (await mockInvokedCommands(page)).filter(
+        (command) => command === "plugin:dialog|message"
+      )).toHaveLength(1);
+      await expect.poll(async () => (await mockInvokedCalls(page)).find(
+        ({ command }) => command === "plugin:dialog|message"
+      )?.args).toMatchObject({
+        message: resetCase.message,
+        kind: "warning",
+        buttons: { OkCancelCustom: ["Reset", "Cancel"] },
+      });
+      await expect.poll(async () => (await mockInvokedCommands(page)).filter(
+        (command) => command === resetCase.command
+      )).toHaveLength(0);
+
+      await page.evaluate(() => {
+        ((window as Window & { __TAURI_MOCK__?: { dialogResponses?: string[] } }).__TAURI_MOCK__
+          ?.dialogResponses ?? []).push("Reset");
+      });
+      await page.getByRole("button", { name: "⋮ More" }).click();
+      await page.getByRole("menuitem", { name: resetCase.action }).click();
+      await expect.poll(async () => (await mockInvokedCommands(page)).filter(
+        (command) => command === "plugin:dialog|message"
+      )).toHaveLength(2);
+      await expect.poll(async () => (await mockInvokedCommands(page)).filter(
+        (command) => command === resetCase.command
+      )).toHaveLength(1);
+    });
+  }
 
   test("manual mode supports select-select-deselect workflow", async ({ page }) => {
     await page.getByRole("button", { name: MANUAL_PROJECT }).click();
@@ -127,7 +240,8 @@ test.describe("QuickPanel UI", () => {
     await stepPause(page);
     await expect(page.getByRole("button", { name: "Recent" })).toBeVisible();
 
-    await page.getByRole("button", { name: "About" }).click();
+    await page.getByRole("button", { name: "⋮ More" }).click();
+    await page.getByRole("menuitem", { name: "About" }).click();
     await stepPause(page);
     await expect(page.getByRole("heading", { name: "About ProjectLog" })).toBeVisible();
     await page.getByRole("button", { name: "Close", exact: true }).click();
@@ -170,16 +284,16 @@ test.describe("QuickPanel grouping", () => {
     const boxes = page.locator(".project-group-box");
 
     await expect(boxes).toHaveCount(2);
-    await expect(boxes.nth(0).locator(".group-header")).toHaveText("Personal");
+    await expect(boxes.nth(0).locator(".group-header span").last()).toHaveText("Work");
     await expect(boxes.nth(0).locator(".group-chevron")).toBeVisible();
-    await expect(boxes.nth(0).locator(".project-row")).toHaveCount(1);
-    await expect(boxes.nth(0).locator(".project-row")).toHaveClass(/project-row-indented/);
-    await expect(boxes.nth(0).locator(".project-button span")).toHaveText("Charlie");
+    await expect(boxes.nth(0).locator(".project-row")).toHaveCount(2);
+    await expect(boxes.nth(0).locator(".project-row").first()).toHaveClass(/project-row-indented/);
+    await expect(boxes.nth(0).locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
 
-    await expect(boxes.nth(1).locator(".group-header")).toHaveText("Work");
-    await expect(boxes.nth(1).locator(".project-row")).toHaveCount(2);
-    await expect(boxes.nth(1).locator(".project-row").first()).toHaveClass(/project-row-indented/);
-    await expect(boxes.nth(1).locator(".project-button span")).toHaveText(["Bravo", "Delta"]);
+    await expect(boxes.nth(1).locator(".group-header span").last()).toHaveText("Personal");
+    await expect(boxes.nth(1).locator(".project-row")).toHaveCount(1);
+    await expect(boxes.nth(1).locator(".project-row")).toHaveClass(/project-row-indented/);
+    await expect(boxes.nth(1).locator(".project-button span")).toHaveText("Charlie");
 
     const ungrouped = page.locator(".project-list > .project-row", { hasText: "Alpha" });
     await expect(ungrouped).toHaveCount(1);
@@ -203,7 +317,7 @@ test.describe("QuickPanel grouping", () => {
   });
 
   test("grouping checkbox toggles boxed layout and is locked in manual mode", async ({ page }) => {
-    const checkbox = page.getByLabel("Group");
+    const checkbox = page.getByRole("checkbox", { name: "Group" });
 
     await expect(checkbox).toBeChecked();
     await expect(checkbox).toBeDisabled();
@@ -216,6 +330,33 @@ test.describe("QuickPanel grouping", () => {
 
     await checkbox.check();
     await expect(page.locator(".project-group-box")).toHaveCount(2);
+  });
+
+  test("manual drag reorders projects only within their current group", async ({ page }) => {
+    async function dragProjectTo(project: string, target: string, targetRatio: number) {
+      const source = page.locator(".project-row", { has: page.getByRole("button", { name: project }) });
+      const targetRow = page.locator(".project-row", { has: page.getByRole("button", { name: target }) });
+      const sourceBox = await source.locator(".drag-handle").boundingBox();
+      const targetBox = await targetRow.boundingBox();
+
+      expect(sourceBox).not.toBeNull();
+      expect(targetBox).not.toBeNull();
+
+      await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height * targetRatio);
+      await page.mouse.up();
+    }
+
+    const labels = page.locator(".project-button span");
+
+    await expect(labels).toHaveText(["Alpha", "Bravo", "Delta", "Charlie"]);
+
+    await dragProjectTo("Bravo", "Delta", 0.75);
+    await expect(labels).toHaveText(["Alpha", "Delta", "Bravo", "Charlie"]);
+
+    await dragProjectTo("Bravo", "Charlie", 0.75);
+    await expect(labels).toHaveText(["Alpha", "Delta", "Bravo", "Charlie"]);
   });
 
 });
@@ -248,9 +389,33 @@ test.describe("QuickPanel grouping checkbox visibility", () => {
     await page.locator(".project-row", { hasText: "Alpha" }).click({ button: "right" });
     await page.locator(".context-menu-item", { hasText: "Work" }).click();
 
-    await expect(page.getByLabel("Group")).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: "Group" })).toBeChecked();
     await expect(page.locator(".project-group-box", { hasText: "Work" })).toBeVisible();
     await expect(page.locator(".project-group-box", { hasText: "Work" }).locator(".project-button span")).toHaveText(["Alpha", "Bravo"]);
+  });
+
+  test("empty groups are hidden from the list but remain pickable", async ({ page }) => {
+    await installTauriMocks(page, {
+      projects: ["Alpha", "Bravo"],
+      settings: {
+        project_sort_mode: "alphabetical",
+        project_manual_order: ["Alpha", "Bravo"],
+        group_projects_enabled: true,
+        project_groups: { Bravo: "Work" },
+      },
+    });
+    await page.goto("/");
+    await stepPause(page);
+
+    await expect(page.locator(".project-group-box", { hasText: "Work" })).toBeVisible();
+
+    await page.locator(".project-row", { hasText: "Bravo" }).click({ button: "right" });
+    await page.locator(".context-menu-item", { hasText: "Ungrouped" }).click();
+
+    await expect(page.locator(".project-group-box", { hasText: "Work" })).toHaveCount(0);
+
+    await page.locator(".project-row", { hasText: "Alpha" }).click({ button: "right" });
+    await expect(page.locator(".context-menu-item", { hasText: "Work" })).toBeVisible();
   });
 
 });
@@ -394,4 +559,91 @@ test.describe("Timesheet preview window", () => {
   // Deferred: opening the preview from QuickPanel as a true separate native window should be covered
   // later with a desktop E2E layer. The current browser suite can validate the preview surface and
   // the open command path, but not an actual spawned Tauri window.
+});
+
+test("Tauri mocks bootstrap a configured multi-sheet preview", async ({ page }) => {
+  const sheet = (name: string) => ({
+    name,
+    columns: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    rows: [{
+      label: name,
+      values: [1, 0, 0, 0, 0, 0, 0],
+      total: 1,
+      is_comment: false,
+      is_total: false,
+    }],
+  });
+
+  await installTauriMocks(page, {}, {
+    currentWindowLabel: "timesheet-preview",
+    initialPreviewRequest: { range: "all", format: "full" },
+    previewResponse: {
+      title: "Configured preview",
+      generated_at: "2026-07-21 12:00",
+      generated_at_epoch_ms: Date.UTC(2026, 6, 21, 12),
+      sheets: [sheet("Earlier"), sheet("Current")],
+    },
+  });
+
+  await page.goto("/?window=timesheet-preview");
+
+  await expect(page.getByRole("heading", { name: "Configured preview" })).toBeVisible();
+  await expect(page.locator(".sheet-tabs button")).toHaveText(["Earlier", "Current"]);
+});
+
+test.describe("Full timesheet week selection", () => {
+  function isoWeekName(weekOffset: number) {
+    const date = new Date();
+    date.setDate(date.getDate() + weekOffset * 7);
+    const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    utc.setUTCDate(utc.getUTCDate() + 4 - (utc.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    return `${utc.getUTCFullYear()}-${week}`;
+  }
+
+  function preview(offsets: number[]) {
+    return {
+      title: "Full timesheet",
+      generated_at: "2026-07-21 12:00",
+      generated_at_epoch_ms: Date.now(),
+      sheets: offsets.map((offset) => ({
+        name: isoWeekName(offset),
+        columns: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        rows: [{
+          label: `Week ${offset}`,
+          values: [1, 0, 0, 0, 0, 0, 0],
+          total: 1,
+          is_comment: false,
+          is_total: false,
+        }],
+      })),
+    };
+  }
+
+  async function openPreview(page: Parameters<typeof test>[0]["page"], offsets: number[]) {
+    await installTauriMocks(page, {}, {
+      currentWindowLabel: "timesheet-preview",
+      initialPreviewRequest: { range: "all", format: "full" },
+      previewResponse: preview(offsets),
+    });
+    await page.goto("/?window=timesheet-preview");
+  }
+
+  test("opens on the current week", async ({ page }) => {
+    await openPreview(page, timesheetWeekCases.with_current_week);
+    await expect(page.locator(".sheet-tabs .sort-active")).toHaveText(isoWeekName(0));
+  });
+
+  test("falls back to the newest available week", async ({ page }) => {
+    await openPreview(page, timesheetWeekCases.without_current_week);
+    await expect(page.locator(".sheet-tabs .sort-active")).toHaveText(isoWeekName(-1));
+  });
+
+  test("preserves a selected historical week on refresh", async ({ page }) => {
+    await openPreview(page, timesheetWeekCases.with_current_week);
+    await page.getByRole("button", { name: isoWeekName(-2) }).click();
+    await page.getByRole("button", { name: "Update now" }).click();
+    await expect(page.locator(".sheet-tabs .sort-active")).toHaveText(isoWeekName(-2));
+  });
 });
