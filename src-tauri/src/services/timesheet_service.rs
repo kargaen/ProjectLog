@@ -286,72 +286,119 @@ fn build_preview(parsed: ParsedLog, options: TimesheetOptions) -> Result<Timeshe
     })
 }
 
-fn round_half_preserving_sum(values: &[f64]) -> Vec<f64> {
-    let step = 0.5_f64;
-    let floors: Vec<f64> = values.iter().map(|&v| (v / step).floor() * step).collect();
-    let rounded_total = (values.iter().sum::<f64>() / step).round() * step;
-    let current_total: f64 = floors.iter().sum();
-    let mut increments = ((rounded_total - current_total) / step).round() as i64;
+const HOUR_STEP: f64 = 0.5;
+// Lower bound rounds every cell down to zero, upper bound doubles every cell: any
+// reachable target sum lies between the two. Midpoint of the first bisection is
+// exactly 1, so an already-consistent sheet costs a single iteration.
+const SCALE_LOWER_BOUND: f64 = 0.0;
+const SCALE_UPPER_BOUND: f64 = 2.0;
+const SCALE_BISECT_ITERATIONS: usize = 40;
+const SUM_EPSILON: f64 = 0.000001;
+// Cells holding the same hours would otherwise cross the half-hour boundary at the
+// same scale, moving the sum by a whole group at a time and stepping over the
+// target. Weighting each cell by its position separates those crossings, so the
+// sum climbs half an hour at a time and the bisect can land on the target. The
+// weight is far too small to move a cell across a boundary on its own.
+const TIE_BREAK_WEIGHT: f64 = 0.000000001;
 
-    let mut ranked: Vec<(usize, f64)> = values
+fn round_to_hour_step(value: f64) -> f64 {
+    (value / HOUR_STEP).round() * HOUR_STEP
+}
+
+fn round_cell(value: f64, scale: f64, cell_index: usize) -> f64 {
+    round_to_hour_step(value * scale * (1.0 + cell_index as f64 * TIE_BREAK_WEIGHT))
+}
+
+fn scaled_rounded_sum(values: &[f64], scale: f64) -> f64 {
+    values
         .iter()
         .enumerate()
-        .map(|(i, &v)| (i, v - floors[i]))
-        .collect();
-    ranked.sort_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
+        .map(|(index, &v)| round_cell(v, scale, index))
+        .sum()
+}
 
-    let mut result = floors;
-    for &(idx, _) in &ranked {
-        if increments <= 0 {
-            break;
+/// Bisects a scale factor until the cells, scaled and then rounded to whole half
+/// hours, add up to `target`. The sum is non-decreasing in the scale, so halving
+/// the bracket each step converges on it. A target no scale can reach falls back
+/// to the scale that came closest.
+fn find_rounding_scale(values: &[f64], target: f64) -> f64 {
+    let mut low = SCALE_LOWER_BOUND;
+    let mut high = SCALE_UPPER_BOUND;
+    let mut best_scale = SCALE_UPPER_BOUND;
+    let mut best_distance = f64::INFINITY;
+
+    for _ in 0..SCALE_BISECT_ITERATIONS {
+        let scale = (low + high) / 2.0;
+        let sum = scaled_rounded_sum(values, scale);
+        let distance = (sum - target).abs();
+
+        if distance < best_distance {
+            best_distance = distance;
+            best_scale = scale;
         }
-        result[idx] += step;
-        increments -= 1;
+
+        if distance < SUM_EPSILON {
+            return scale;
+        }
+
+        if sum < target {
+            low = scale;
+        } else {
+            high = scale;
+        }
     }
 
-    result
+    best_scale
+}
+
+/// One scale factor per sheet, chosen so the sheet's rounded cells add up to the
+/// sheet's rounded total. Comment rows break a project's own hours down further,
+/// so they stay out of the target — counting them would double the sheet.
+fn sheet_rounding_scale(sheet: &TimesheetPreviewSheet) -> f64 {
+    let counted: Vec<f64> = sheet
+        .rows
+        .iter()
+        .filter(|row| !row.is_comment && !row.is_total)
+        .flat_map(|row| row.values.iter().copied())
+        .collect();
+    let target_total = round_to_hour_step(counted.iter().sum::<f64>());
+
+    find_rounding_scale(&counted, target_total)
 }
 
 fn apply_rounding_to_preview(mut preview: TimesheetPreview) -> TimesheetPreview {
     for sheet in &mut preview.sheets {
-        let project_indices: Vec<usize> = sheet
-            .rows
-            .iter()
-            .enumerate()
-            .filter_map(|(index, row)| (!row.is_total && !row.is_comment).then_some(index))
-            .collect();
+        let scale = sheet_rounding_scale(sheet);
+        // Counts the cells the scale was fitted against, in the order it saw them, so
+        // each one keeps the tie-break weight the bisect assigned it.
+        let mut counted_cell_index = 0_usize;
+
+        for row in sheet.rows.iter_mut() {
+            if row.is_total {
+                continue;
+            }
+            let rounded: Vec<f64> = row
+                .values
+                .iter()
+                .map(|&v| {
+                    if row.is_comment {
+                        round_to_hour_step(v * scale)
+                    } else {
+                        let rounded = round_cell(v, scale, counted_cell_index);
+                        counted_cell_index += 1;
+                        rounded
+                    }
+                })
+                .collect();
+            row.total = rounded.iter().sum();
+            row.values = rounded;
+        }
+
         let value_count = sheet
             .rows
             .iter()
             .find(|r| r.is_total)
             .map_or(0, |r| r.values.len());
-
-        // Allocate half-hour increments within each day so the visible entries retain the
-        // rounded daily aggregate instead of accumulating independent per-project losses.
-        for value_index in 0..value_count {
-            let values: Vec<f64> = project_indices
-                .iter()
-                .map(|&row_index| sheet.rows[row_index].values[value_index])
-                .collect();
-            let rounded = round_half_preserving_sum(&values);
-            for (&row_index, value) in project_indices.iter().zip(rounded) {
-                sheet.rows[row_index].values[value_index] = value;
-            }
-        }
-
-        for row in sheet.rows.iter_mut().filter(|row| row.is_comment) {
-            row.values = round_half_preserving_sum(&row.values);
-            row.total = row.values.iter().sum();
-        }
-
-        for &row_index in &project_indices {
-            sheet.rows[row_index].total = sheet.rows[row_index].values.iter().sum();
-        }
-
         let mut column_totals = vec![0.0_f64; value_count];
         for row in sheet.rows.iter() {
             if row.is_total || row.is_comment {
