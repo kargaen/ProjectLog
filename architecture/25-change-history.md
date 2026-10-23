@@ -13,3 +13,4 @@ changes are not recorded here.
 | 2026-07-17 | EPIC-008 | `description/13` | Added the creation-recency guarantee: newly added or quick-tracked projects receive an initial `project_recent_usage` timestamp so Recent ordering has a value before later selection. |
 | 2026-07-17 | EPIC-008 | `description/13` | Closed the project color/grouping redesign: documented `groupedProjects`, empty groups staying hidden while known group names remain pickable, and the grouped checkbox/manual drag behavior as shipped. |
 | 2026-07-29 | dependency-change run | `description/01` | Added the frontend Tauri dialog binding so QuickPanel destructive resets use the native dialog facility already used by the tray. |
+| 2026-10-23 | EPIC-012 | `description/02` | Added the tray "Pop-up reminder" submenu and the `app_setup.rs` timer that shows the QuickPanel every chosen interval (`reminder_interval_minutes`, 0 = off). |

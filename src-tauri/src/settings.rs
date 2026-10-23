@@ -59,6 +59,7 @@ mod tests {
             project_colors: HashMap::from([("Alpha".to_string(), "#267a62".to_string())]),
             project_groups: HashMap::from([("Alpha".to_string(), "Work".to_string())]),
             group_projects_enabled: true,
+            reminder_interval_minutes: 60,
         };
 
         save(&dir, &expected);
@@ -86,6 +87,10 @@ mod tests {
             actual.group_projects_enabled,
             expected.group_projects_enabled
         );
+        assert_eq!(
+            actual.reminder_interval_minutes,
+            expected.reminder_interval_minutes
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -109,6 +114,7 @@ mod tests {
         assert_eq!(settings.project_sort_mode, "manual");
         assert_eq!(settings.quickpanel_mode, "normal");
         assert!(!settings.timesheet_rounding_enabled);
+        assert_eq!(settings.reminder_interval_minutes, 0);
         let _ = fs::remove_dir_all(dir);
     }
 

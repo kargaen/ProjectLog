@@ -195,6 +195,24 @@ pub fn build_menu(app: &AppHandle) -> Result<Menu<Wry>, Box<dyn std::error::Erro
     )?)?;
     menu.append(&panel_mode_sub)?;
 
+    let reminder_sub = Submenu::with_id(app, "reminder_menu", "Pop-up reminder", true)?;
+    for (minutes, label) in [
+        (0, "Off"),
+        (30, "Every 30 minutes"),
+        (60, "Every hour"),
+        (120, "Every 2 hours"),
+    ] {
+        reminder_sub.append(&CheckMenuItem::with_id(
+            app,
+            &format!("reminder::{minutes}"),
+            label,
+            true,
+            settings.reminder_interval_minutes == minutes,
+            None::<&str>,
+        )?)?;
+    }
+    menu.append(&reminder_sub)?;
+
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
     let project_entries = grouped_level_one(

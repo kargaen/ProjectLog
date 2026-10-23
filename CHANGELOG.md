@@ -1,5 +1,6 @@
 ## Unreleased
 
+- New tray option "Pop-up reminder": the QuickPanel can pop up every 30 minutes, hour or 2 hours as a nudge to log what you are working on. Off by default. (EPIC-012)
 - Fixed QuickPanel reset confirmations not appearing in packaged release candidates before destructive actions ran.
 - QuickPanel now prioritizes Yesterday + Today and Full Timesheet, while About and confirmed destructive resets live in an accessible More menu. (EPIC-011)
 - Full timesheet previews and Excel exports now open on the current week, falling back to the newest recorded week when needed. (EPIC-010)

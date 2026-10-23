@@ -54,6 +54,9 @@ pub struct UiSettings {
     pub project_groups: HashMap<String, String>,
     #[serde(default = "default_group_projects_enabled")]
     pub group_projects_enabled: bool,
+    /// Minutes between QuickPanel pop-ups; 0 = off.
+    #[serde(default)]
+    pub reminder_interval_minutes: u32,
 }
 
 impl Default for UiSettings {
@@ -75,6 +78,7 @@ impl Default for UiSettings {
             project_colors: HashMap::new(),
             project_groups: HashMap::new(),
             group_projects_enabled: default_group_projects_enabled(),
+            reminder_interval_minutes: 0,
         }
     }
 }
