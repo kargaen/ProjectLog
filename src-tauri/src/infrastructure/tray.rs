@@ -51,6 +51,8 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         handle_generate(app, id);
     } else if let Some(id) = id.strip_prefix("qp_mode::") {
         handle_quickpanel_mode(app, id);
+    } else if let Some(id) = id.strip_prefix("reminder::") {
+        handle_reminder_interval(app, id);
     } else {
         match id {
             "set_comment" => show_input(app, "set_comment", "Set comment:"),
@@ -73,6 +75,13 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
 fn handle_quickpanel_mode(app: &AppHandle, mode: &str) {
     let state = app.state::<AppState>();
     settings_controller::set_quickpanel_mode(mode, &state, app);
+}
+
+fn handle_reminder_interval(app: &AppHandle, minutes: &str) {
+    if let Ok(minutes) = minutes.parse() {
+        let state = app.state::<AppState>();
+        settings_controller::set_reminder_interval(minutes, &state, app);
+    }
 }
 
 fn handle_select_by_id(app: &AppHandle, id: &str) {

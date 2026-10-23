@@ -16,6 +16,7 @@ A floating Tauri window with full access to all features:
 
 A native system tray menu that mirrors core QuickPanel actions without requiring the window to be open:
 
+- Pop-up reminder (Off, every 30 minutes, hour or 2 hours): a background timer in `app_setup.rs` shows the QuickPanel when the interval passes; stored as `reminder_interval_minutes`, off by default
 - Project list for direct activation, with named groups shown as native submenus when grouping is enabled
 - Set comment
 - Add / Quick add / Remove project

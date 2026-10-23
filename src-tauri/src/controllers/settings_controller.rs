@@ -144,6 +144,17 @@ pub fn set_project_group(project: String, group: Option<String>, state: &AppStat
     emit_state_changed(app);
 }
 
+pub fn set_reminder_interval(minutes: u32, state: &AppState, app: &AppHandle) {
+    let mut settings = state.settings.lock().unwrap();
+    if settings.reminder_interval_minutes != minutes {
+        settings.reminder_interval_minutes = minutes;
+        settings::save(&state.data_dir, &settings);
+    }
+    drop(settings);
+    // Always rebuild: clicking the checked entry un-ticks it natively.
+    tray::rebuild_menu(app);
+}
+
 pub fn set_quickpanel_mode(mode: &str, state: &AppState, app: &AppHandle) {
     if mode != "normal" && mode != "compact" {
         return;
